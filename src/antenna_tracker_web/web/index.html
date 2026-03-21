@@ -3,199 +3,219 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Antenna Tracker Dashboard</title>
+    <title>Antenna Tracker GCS</title>
+    <meta name="description" content="Ground Control Station Dashboard for Antenna Tracker System">
     <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #1a1a2e;
-            color: #eee;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            background: #0b0d18;
+            color: #d8e8f8;
             min-height: 100vh;
         }
         .header {
-            background: #16213e;
-            padding: 15px 30px;
+            background: linear-gradient(90deg, #0f1322, #141b30);
+            padding: 13px 28px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 2px solid #0f3460;
+            border-bottom: 1px solid #1c2a45;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.5);
         }
-        .header h1 { font-size: 1.4em; color: #e94560; }
-        .status-dot {
-            width: 12px; height: 12px; border-radius: 50%;
-            display: inline-block; margin-right: 8px;
-        }
-        .status-dot.connected { background: #00e676; }
-        .status-dot.disconnected { background: #ff1744; }
+        .header h1 { font-size: 1.2em; font-weight: 700; color: #b8d4ff; letter-spacing: 0.4px; }
+        .header-subtitle { font-size: 0.72em; color: #3d5a8a; margin-top: 2px; }
+        .connection-status { display: flex; align-items: center; gap: 9px; font-size: 0.82em; color: #8aaecc; }
+        .status-dot { width: 9px; height: 9px; border-radius: 50%; }
+        .status-dot.connected { background: #22d46e; box-shadow: 0 0 8px #22d46e88; animation: blink 2s infinite; }
+        .status-dot.disconnected { background: #e83a55; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
         .container {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            padding: 20px;
-            max-width: 1400px;
+            grid-template-columns: 1fr 1fr 280px;
+            gap: 15px;
+            padding: 16px;
+            max-width: 1480px;
             margin: 0 auto;
         }
+
         .card {
-            background: #16213e;
-            border-radius: 12px;
-            padding: 20px;
-            border: 1px solid #0f3460;
+            background: linear-gradient(145deg, #111624, #131a2e);
+            border-radius: 11px;
+            padding: 17px;
+            border: 1px solid #1a2640;
+            box-shadow: 0 4px 22px rgba(0,0,0,0.35);
+            transition: border-color 0.2s;
         }
+        .card:hover { border-color: #253555; }
         .card h2 {
-            font-size: 1.1em;
-            color: #e94560;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #0f3460;
-            padding-bottom: 8px;
+            font-size: 0.72em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.8px;
+            color: #4a80bb;
+            margin-bottom: 13px;
+            border-bottom: 1px solid #192035;
+            padding-bottom: 7px;
         }
         .metric {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #0f346033;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #15202e22;
         }
+        .metric-label { font-size: 0.8em; color: #6888aa; }
         .metric-value {
-            font-weight: bold;
-            font-family: 'Courier New', monospace;
-            color: #00e5ff;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.88em; font-weight: 500;
+            color: #55c8ee;
+            transition: color 0.3s;
         }
-        .mode-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
+        .metric-value.warn { color: #f0a030 !important; }
+        .metric-value.error2 { color: #f05050 !important; }
+
+        /* Mode */
+        #activeModeDisplay {
+            font-family: 'Roboto Mono', monospace;
+            font-size: 1em; font-weight: 700; letter-spacing: 2px;
+            padding: 7px 10px; border-radius: 6px;
+            background: #121c34; color: #f0a030;
+            display: inline-block; margin-bottom: 11px;
         }
+        .mode-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
         .mode-btn {
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
+            padding: 9px 5px; border: 1px solid transparent; border-radius: 7px;
+            font-size: 0.78em; font-weight: 700; letter-spacing: 0.8px;
+            cursor: pointer; transition: all 0.15s; background: transparent;
         }
-        .mode-btn:hover { transform: scale(1.02); }
-        .mode-btn.auto { background: #00e676; color: #000; }
-        .mode-btn.manual { background: #2196f3; color: #fff; }
-        .mode-btn.standby { background: #ff9800; color: #000; }
-        .mode-btn.emergency { background: #ff1744; color: #fff; }
-        .mode-btn.active { box-shadow: 0 0 15px rgba(255,255,255,0.3); }
-        .chart-container { height: 200px; margin-top: 10px; }
+        .mode-btn:hover { transform: translateY(-1px); }
+        .mode-btn.auto      { border-color: #22d46e; color: #22d46e; }
+        .mode-btn.manual    { border-color: #3e88ee; color: #3e88ee; }
+        .mode-btn.standby   { border-color: #f0a030; color: #f0a030; }
+        .mode-btn.emergency { border-color: #e83a55; color: #e83a55; background: #e83a5514; }
+        .mode-btn.mode-active { background: rgba(255,255,255,0.07); box-shadow: 0 0 11px currentColor55; }
+
+        /* Compass */
+        .compass-wrapper { display: flex; flex-direction: column; align-items: center; gap: 11px; }
+        #compassCanvas { display: block; }
+        .compass-values { display: flex; gap: 22px; font-family: 'Roboto Mono', monospace; font-size: 0.82em; }
+        .cv-item { text-align: center; }
+        .cv-label { font-size: 0.7em; color: #4a80bb; text-transform: uppercase; letter-spacing: 1px; }
+        .cv-val { color: #55c8ee; font-size: 1.02em; font-weight: 500; }
+        .cv-val.tgt { color: #f0a030; }
+
+        /* Chart */
+        .chart-container { height: 185px; margin-top: 8px; }
         .full-width { grid-column: 1 / -1; }
-        .health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+        /* Health */
+        .health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
         .health-item {
-            text-align: center; padding: 10px; border-radius: 8px;
-            background: #1a1a2e;
+            text-align: center; padding: 8px 4px; border-radius: 6px;
+            font-size: 0.72em; font-weight: 700; letter-spacing: 0.5px;
+            background: #0b0d18; border: 1px solid #1a2640; transition: all 0.2s;
         }
-        .health-item.ok { border: 1px solid #00e676; }
-        .health-item.fail { border: 1px solid #ff1744; }
+        .health-item.ok   { border-color: #22d46e55; color: #22d46e; }
+        .health-item.fail { border-color: #e83a5555; color: #e83a55; }
+
+        /* Signal bar */
+        .sig-bar-wrap { background: #0b0d18; border-radius: 5px; height: 9px; overflow: hidden; margin: 6px 0 2px; }
+        .sig-bar { height:100%; border-radius:5px; background: linear-gradient(90deg,#e83a55,#f0a030,#22d46e); transition: width 0.6s; }
+
+        .right-col { display: flex; flex-direction: column; gap: 15px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Antenna Tracker GCS</h1>
         <div>
+            <h1>🛰 Antenna Tracker GCS</h1>
+            <div class="header-subtitle">Ground Control Station &mdash; ROS 2 Humble</div>
+        </div>
+        <div class="connection-status">
             <span class="status-dot disconnected" id="statusDot"></span>
             <span id="statusText">Disconnected</span>
         </div>
     </div>
 
     <div class="container">
+
+        <!-- Position -->
         <div class="card">
             <h2>Current Position</h2>
-            <div class="metric">
-                <span>Azimuth</span>
-                <span class="metric-value" id="curAz">0.00&deg;</span>
-            </div>
-            <div class="metric">
-                <span>Elevation</span>
-                <span class="metric-value" id="curEl">0.00&deg;</span>
-            </div>
-            <div class="metric">
-                <span>Target Azimuth</span>
-                <span class="metric-value" id="tgtAz">0.00&deg;</span>
-            </div>
-            <div class="metric">
-                <span>Target Elevation</span>
-                <span class="metric-value" id="tgtEl">0.00&deg;</span>
-            </div>
-            <div class="metric">
-                <span>AZ Error</span>
-                <span class="metric-value" id="azErr">0.00&deg;</span>
-            </div>
-            <div class="metric">
-                <span>EL Error</span>
-                <span class="metric-value" id="elErr">0.00&deg;</span>
-            </div>
+            <div class="metric"><span class="metric-label">Azimuth</span><span class="metric-value" id="curAz">0.00°</span></div>
+            <div class="metric"><span class="metric-label">Elevation</span><span class="metric-value" id="curEl">0.00°</span></div>
+            <div class="metric"><span class="metric-label">Target Azimuth</span><span class="metric-value" id="tgtAz">0.00°</span></div>
+            <div class="metric"><span class="metric-label">Target Elevation</span><span class="metric-value" id="tgtEl">0.00°</span></div>
+            <div class="metric"><span class="metric-label">AZ Error</span><span class="metric-value" id="azErr">0.00°</span></div>
+            <div class="metric"><span class="metric-label">EL Error</span><span class="metric-value" id="elErr">0.00°</span></div>
+            <div class="metric" style="margin-top:8px;"><span class="metric-label">AZ Motor (Hz)</span><span class="metric-value" id="azMotor">0.0</span></div>
+            <div class="metric"><span class="metric-label">EL Motor (Hz)</span><span class="metric-value" id="elMotor">0.0</span></div>
         </div>
 
+        <!-- Compass -->
         <div class="card">
-            <h2>Mode Control</h2>
-            <div class="metric">
-                <span>Current Mode</span>
-                <span class="metric-value" id="curMode">STANDBY</span>
-            </div>
-            <div class="mode-buttons">
-                <button class="mode-btn auto" onclick="setMode(0)">AUTO</button>
-                <button class="mode-btn manual" onclick="setMode(1)">MANUAL</button>
-                <button class="mode-btn standby" onclick="setMode(2)">STANDBY</button>
-                <button class="mode-btn emergency" onclick="setMode(3)">EMERGENCY</button>
-            </div>
-
-            <h2 style="margin-top: 20px;">Motor Output</h2>
-            <div class="metric">
-                <span>AZ Motor (Hz)</span>
-                <span class="metric-value" id="azMotor">0.0</span>
-            </div>
-            <div class="metric">
-                <span>EL Motor (Hz)</span>
-                <span class="metric-value" id="elMotor">0.0</span>
+            <h2>Antenna Bearing</h2>
+            <div class="compass-wrapper">
+                <canvas id="compassCanvas" width="210" height="210"></canvas>
+                <div class="compass-values">
+                    <div class="cv-item"><div class="cv-label">AZ Actual</div><div class="cv-val" id="compassAz">0.0°</div></div>
+                    <div class="cv-item"><div class="cv-label">EL Actual</div><div class="cv-val" id="compassEl">0.0°</div></div>
+                    <div class="cv-item"><div class="cv-label">AZ Target</div><div class="cv-val tgt" id="compassTgtAz">0.0°</div></div>
+                </div>
             </div>
         </div>
 
+        <!-- Right column -->
+        <div class="right-col">
+            <!-- Mode -->
+            <div class="card">
+                <h2>Mode Control</h2>
+                <div id="activeModeDisplay">STANDBY</div>
+                <div class="mode-buttons">
+                    <button class="mode-btn auto"      id="btnAuto"      onclick="setMode(0)">AUTO</button>
+                    <button class="mode-btn manual"    id="btnManual"    onclick="setMode(1)">MANUAL</button>
+                    <button class="mode-btn standby"   id="btnStandby"   onclick="setMode(2)">STANDBY</button>
+                    <button class="mode-btn emergency" id="btnEmergency" onclick="setMode(3)">EMERGENCY</button>
+                </div>
+            </div>
+            <!-- Health -->
+            <div class="card">
+                <h2>System Health</h2>
+                <div class="health-grid">
+                    <div class="health-item" id="healthImu">IMU</div>
+                    <div class="health-item" id="healthMag">MAG</div>
+                    <div class="health-item" id="healthGps">GPS</div>
+                    <div class="health-item" id="healthEncoder">ENC</div>
+                    <div class="health-item" id="healthCan">CAN</div>
+                    <div class="health-item" id="healthCpu">CPU --°C</div>
+                </div>
+                <div class="metric" style="margin-top:11px;">
+                    <span class="metric-label">Control Loop</span>
+                    <span class="metric-value" id="loopRate">-- Hz</span>
+                </div>
+            </div>
+            <!-- GPS -->
+            <div class="card">
+                <h2>Target GPS</h2>
+                <div class="metric"><span class="metric-label">Latitude</span><span class="metric-value" id="tgtLat">--</span></div>
+                <div class="metric"><span class="metric-label">Longitude</span><span class="metric-value" id="tgtLon">--</span></div>
+                <div class="metric"><span class="metric-label">Altitude</span><span class="metric-value" id="tgtAlt">-- m</span></div>
+                <div class="metric"><span class="metric-label">RSSI</span><span class="metric-value" id="tgtRssi">-- dBm</span></div>
+                <div style="margin-top:9px;">
+                    <div class="metric-label" style="margin-bottom:4px; font-size:0.72em; letter-spacing:1px; text-transform:uppercase;">Signal Quality</div>
+                    <div class="sig-bar-wrap"><div class="sig-bar" id="sigBar" style="width:0%"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart full width -->
         <div class="card full-width">
             <h2>Tracking History</h2>
             <div class="chart-container">
                 <canvas id="trackingChart"></canvas>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>System Health</h2>
-            <div class="health-grid">
-                <div class="health-item" id="healthImu">IMU</div>
-                <div class="health-item" id="healthMag">MAG</div>
-                <div class="health-item" id="healthGps">GPS</div>
-                <div class="health-item" id="healthEncoder">ENC</div>
-                <div class="health-item" id="healthCan">CAN</div>
-                <div class="health-item" id="healthCpu">CPU: --&deg;C</div>
-            </div>
-            <div class="metric" style="margin-top: 15px;">
-                <span>Loop Rate</span>
-                <span class="metric-value" id="loopRate">-- Hz</span>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>Target GPS</h2>
-            <div class="metric">
-                <span>Latitude</span>
-                <span class="metric-value" id="tgtLat">--</span>
-            </div>
-            <div class="metric">
-                <span>Longitude</span>
-                <span class="metric-value" id="tgtLon">--</span>
-            </div>
-            <div class="metric">
-                <span>Altitude</span>
-                <span class="metric-value" id="tgtAlt">-- m</span>
-            </div>
-            <div class="metric">
-                <span>RSSI</span>
-                <span class="metric-value" id="tgtRssi">-- dBm</span>
             </div>
         </div>
     </div>

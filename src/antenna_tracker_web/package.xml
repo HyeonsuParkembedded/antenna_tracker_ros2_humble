@@ -8,10 +8,11 @@
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
-  <depend>rclcpp</depend>
-  <depend>antenna_tracker_msgs</depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
+  <exec_depend>antenna_tracker_msgs</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
