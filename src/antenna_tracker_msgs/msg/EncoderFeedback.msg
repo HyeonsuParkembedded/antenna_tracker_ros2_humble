@@ -1,0 +1,9 @@
+std_msgs/Header header
+int32 az_encoder_count
+int32 el_encoder_count
+float64 az_angle_deg
+float64 el_angle_deg
+float64 az_velocity_dps
+float64 el_velocity_dps
+bool az_valid
+bool el_valid

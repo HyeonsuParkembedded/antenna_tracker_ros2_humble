@@ -1,0 +1,17 @@
+# Goal
+float64 target_azimuth_deg
+float64 target_elevation_deg
+float64 tolerance_deg
+float64 timeout_sec
+---
+# Result
+bool success
+float64 final_azimuth
+float64 final_elevation
+float64 tracking_duration_sec
+---
+# Feedback
+float64 current_azimuth
+float64 current_elevation
+float64 az_error
+float64 el_error

@@ -1,0 +1,5 @@
+---
+uint8 current_mode
+float64 current_azimuth
+float64 current_elevation
+bool tracking_active

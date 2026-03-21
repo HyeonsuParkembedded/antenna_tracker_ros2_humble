@@ -1,0 +1,5 @@
+float64 azimuth_deg
+float64 elevation_deg
+---
+bool success
+string message

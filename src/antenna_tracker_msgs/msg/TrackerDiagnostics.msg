@@ -1,0 +1,9 @@
+std_msgs/Header header
+bool imu_ok
+bool mag_ok
+bool gps_ok
+bool encoder_ok
+bool can_ok
+float32 cpu_temp_c
+float32 loop_rate_hz
+float32 loop_jitter_ms

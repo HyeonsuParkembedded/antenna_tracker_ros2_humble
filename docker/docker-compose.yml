@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  ros2_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: antenna_tracker_dev
+    volumes:
+      - ../:/ros2_ws/src/antenna_tracker_ros
+    network_mode: host
+    tty: true
+    stdin_open: true
+    command: /bin/bash

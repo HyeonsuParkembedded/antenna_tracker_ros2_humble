@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antenna Tracker Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        .header {
+            background: #16213e;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f3460;
+        }
+        .header h1 { font-size: 1.4em; color: #e94560; }
+        .status-dot {
+            width: 12px; height: 12px; border-radius: 50%;
+            display: inline-block; margin-right: 8px;
+        }
+        .status-dot.connected { background: #00e676; }
+        .status-dot.disconnected { background: #ff1744; }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #0f3460;
+        }
+        .card h2 {
+            font-size: 1.1em;
+            color: #e94560;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #0f3460;
+            padding-bottom: 8px;
+        }
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #0f346033;
+        }
+        .metric-value {
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            color: #00e5ff;
+        }
+        .mode-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .mode-btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .mode-btn:hover { transform: scale(1.02); }
+        .mode-btn.auto { background: #00e676; color: #000; }
+        .mode-btn.manual { background: #2196f3; color: #fff; }
+        .mode-btn.standby { background: #ff9800; color: #000; }
+        .mode-btn.emergency { background: #ff1744; color: #fff; }
+        .mode-btn.active { box-shadow: 0 0 15px rgba(255,255,255,0.3); }
+        .chart-container { height: 200px; margin-top: 10px; }
+        .full-width { grid-column: 1 / -1; }
+        .health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .health-item {
+            text-align: center; padding: 10px; border-radius: 8px;
+            background: #1a1a2e;
+        }
+        .health-item.ok { border: 1px solid #00e676; }
+        .health-item.fail { border: 1px solid #ff1744; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Antenna Tracker GCS</h1>
+        <div>
+            <span class="status-dot disconnected" id="statusDot"></span>
+            <span id="statusText">Disconnected</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Current Position</h2>
+            <div class="metric">
+                <span>Azimuth</span>
+                <span class="metric-value" id="curAz">0.00&deg;</span>
+            </div>
+            <div class="metric">
+                <span>Elevation</span>
+                <span class="metric-value" id="curEl">0.00&deg;</span>
+            </div>
+            <div class="metric">
+                <span>Target Azimuth</span>
+                <span class="metric-value" id="tgtAz">0.00&deg;</span>
+            </div>
+            <div class="metric">
+                <span>Target Elevation</span>
+                <span class="metric-value" id="tgtEl">0.00&deg;</span>
+            </div>
+            <div class="metric">
+                <span>AZ Error</span>
+                <span class="metric-value" id="azErr">0.00&deg;</span>
+            </div>
+            <div class="metric">
+                <span>EL Error</span>
+                <span class="metric-value" id="elErr">0.00&deg;</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Mode Control</h2>
+            <div class="metric">
+                <span>Current Mode</span>
+                <span class="metric-value" id="curMode">STANDBY</span>
+            </div>
+            <div class="mode-buttons">
+                <button class="mode-btn auto" onclick="setMode(0)">AUTO</button>
+                <button class="mode-btn manual" onclick="setMode(1)">MANUAL</button>
+                <button class="mode-btn standby" onclick="setMode(2)">STANDBY</button>
+                <button class="mode-btn emergency" onclick="setMode(3)">EMERGENCY</button>
+            </div>
+
+            <h2 style="margin-top: 20px;">Motor Output</h2>
+            <div class="metric">
+                <span>AZ Motor (Hz)</span>
+                <span class="metric-value" id="azMotor">0.0</span>
+            </div>
+            <div class="metric">
+                <span>EL Motor (Hz)</span>
+                <span class="metric-value" id="elMotor">0.0</span>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2>Tracking History</h2>
+            <div class="chart-container">
+                <canvas id="trackingChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>System Health</h2>
+            <div class="health-grid">
+                <div class="health-item" id="healthImu">IMU</div>
+                <div class="health-item" id="healthMag">MAG</div>
+                <div class="health-item" id="healthGps">GPS</div>
+                <div class="health-item" id="healthEncoder">ENC</div>
+                <div class="health-item" id="healthCan">CAN</div>
+                <div class="health-item" id="healthCpu">CPU: --&deg;C</div>
+            </div>
+            <div class="metric" style="margin-top: 15px;">
+                <span>Loop Rate</span>
+                <span class="metric-value" id="loopRate">-- Hz</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Target GPS</h2>
+            <div class="metric">
+                <span>Latitude</span>
+                <span class="metric-value" id="tgtLat">--</span>
+            </div>
+            <div class="metric">
+                <span>Longitude</span>
+                <span class="metric-value" id="tgtLon">--</span>
+            </div>
+            <div class="metric">
+                <span>Altitude</span>
+                <span class="metric-value" id="tgtAlt">-- m</span>
+            </div>
+            <div class="metric">
+                <span>RSSI</span>
+                <span class="metric-value" id="tgtRssi">-- dBm</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+# Antenna Tracker Hardware Parameters
+# Ported from antenna_tracker_imu_encoder/firmware/zephyr_app/src/config.h
+
+/**:
+  ros__parameters:
+    # System
+    loop_rate_hz: 100.0
+
+    # Tracker Ground Station Position (Seoul, South Korea)
+    default_ground_lat: 37.5665
+    default_ground_lon: 126.9780
+    default_ground_alt: 30.0
+
+    # Sensor Fusion
+    complementary_alpha: 0.98
+    mag_declination_deg: -8.0
+    kalman_q_process: 0.001
+    kalman_r_measurement: 2.0
+
+    # PID: Azimuth Position (Outer Loop)
+    az_pos_kp: 15.0
+    az_pos_ki: 0.1
+    az_pos_kd: 0.3
+
+    # PID: Azimuth Velocity (Inner Loop)
+    az_vel_kp: 4.0
+    az_vel_ki: 0.05
+    az_vel_kd: 0.1
+
+    # PID: Elevation Position (Outer Loop - Higher Ki for gravity)
+    el_pos_kp: 8.0
+    el_pos_ki: 1.0
+    el_pos_kd: 0.2
+
+    # PID: Elevation Velocity (Inner Loop)
+    el_vel_kp: 5.0
+    el_vel_ki: 0.15
+    el_vel_kd: 0.08
+
+    # Angle Limits
+    azimuth_min_deg: 0.0
+    azimuth_max_deg: 360.0
+    elevation_min_deg: 0.0
+    elevation_max_deg: 90.0
+
+    # Motor Configuration
+    stepper_pulses_per_rev: 200
+    stepper_microsteps: 1
+    gear_ratio: 5.0
+
+    # CAN Bridge
+    can_interface: "can0"
+    can_bitrate: 500000
+
+    # Safety Timeouts
+    imu_timeout_sec: 1.0
+    lora_timeout_sec: 5.0
+    gps_timeout_sec: 10.0
+
+    # Diagnostics
+    diagnostics_rate_hz: 1.0

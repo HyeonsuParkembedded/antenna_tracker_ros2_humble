@@ -1,0 +1,75 @@
+#ifndef ANTENNA_TRACKER_CONTROLLER__STATE_MACHINE_NODE_HPP_
+#define ANTENNA_TRACKER_CONTROLLER__STATE_MACHINE_NODE_HPP_
+
+#include <rclcpp/rclcpp.hpp>
+#include <antenna_tracker_msgs/msg/antenna_state.hpp>
+#include <antenna_tracker_msgs/msg/imu_fusion.hpp>
+#include <antenna_tracker_msgs/msg/encoder_feedback.hpp>
+#include <antenna_tracker_msgs/msg/target_gps.hpp>
+#include <antenna_tracker_msgs/msg/tracker_diagnostics.hpp>
+#include <antenna_tracker_msgs/srv/set_mode.hpp>
+#include <antenna_tracker_msgs/srv/set_manual_target.hpp>
+#include <antenna_tracker_msgs/srv/get_status.hpp>
+
+namespace antenna_tracker_controller
+{
+
+enum class OperationMode : uint8_t {
+  AUTO = 0,
+  MANUAL = 1,
+  STANDBY = 2,
+  EMERGENCY = 3
+};
+
+class StateMachineNode : public rclcpp::Node
+{
+public:
+  explicit StateMachineNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+
+private:
+  void state_callback(const antenna_tracker_msgs::msg::AntennaState::SharedPtr msg);
+  void fusion_callback(const antenna_tracker_msgs::msg::ImuFusion::SharedPtr msg);
+  void encoder_callback(const antenna_tracker_msgs::msg::EncoderFeedback::SharedPtr msg);
+  void target_callback(const antenna_tracker_msgs::msg::TargetGPS::SharedPtr msg);
+  void diagnostics_timer_callback();
+
+  void set_mode_callback(
+    const std::shared_ptr<antenna_tracker_msgs::srv::SetMode::Request> request,
+    std::shared_ptr<antenna_tracker_msgs::srv::SetMode::Response> response);
+  void set_manual_target_callback(
+    const std::shared_ptr<antenna_tracker_msgs::srv::SetManualTarget::Request> request,
+    std::shared_ptr<antenna_tracker_msgs::srv::SetManualTarget::Response> response);
+  void get_status_callback(
+    const std::shared_ptr<antenna_tracker_msgs::srv::GetStatus::Request> request,
+    std::shared_ptr<antenna_tracker_msgs::srv::GetStatus::Response> response);
+
+  static const char * mode_name(OperationMode mode);
+
+  rclcpp::Subscription<antenna_tracker_msgs::msg::AntennaState>::SharedPtr sub_state_;
+  rclcpp::Subscription<antenna_tracker_msgs::msg::ImuFusion>::SharedPtr sub_fusion_;
+  rclcpp::Subscription<antenna_tracker_msgs::msg::EncoderFeedback>::SharedPtr sub_encoder_;
+  rclcpp::Subscription<antenna_tracker_msgs::msg::TargetGPS>::SharedPtr sub_target_;
+
+  rclcpp::Publisher<antenna_tracker_msgs::msg::TrackerDiagnostics>::SharedPtr pub_diagnostics_;
+
+  rclcpp::Service<antenna_tracker_msgs::srv::SetMode>::SharedPtr srv_set_mode_;
+  rclcpp::Service<antenna_tracker_msgs::srv::SetManualTarget>::SharedPtr srv_manual_target_;
+  rclcpp::Service<antenna_tracker_msgs::srv::GetStatus>::SharedPtr srv_get_status_;
+
+  rclcpp::TimerBase::SharedPtr diagnostics_timer_;
+
+  OperationMode current_mode_{OperationMode::STANDBY};
+  double current_azimuth_{0.0};
+  double current_elevation_{0.0};
+
+  /* Health tracking */
+  rclcpp::Time last_imu_time_;
+  rclcpp::Time last_encoder_time_;
+  rclcpp::Time last_target_time_;
+  uint64_t loop_count_{0};
+  rclcpp::Time loop_start_time_;
+};
+
+}  // namespace antenna_tracker_controller
+
+#endif

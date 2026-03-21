@@ -1,0 +1,9 @@
+std_msgs/Header header
+float64 roll
+float64 pitch
+float64 yaw
+float64 azimuth
+float64 elevation
+float64 az_velocity
+float64 el_velocity
+bool kalman_valid

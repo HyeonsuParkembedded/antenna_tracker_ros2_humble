@@ -1,0 +1,8 @@
+build/
+install/
+log/
+firmware/build/
+firmware/.west/
+*.pyc
+__pycache__/
+.vscode/

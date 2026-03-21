@@ -1,0 +1,50 @@
+# Antenna Tracker Simulation Parameters
+# Relaxed gains for Gazebo simulation
+
+/**:
+  ros__parameters:
+    # System
+    loop_rate_hz: 100.0
+    use_sim_time: true
+
+    # Tracker Ground Station Position (Seoul)
+    default_ground_lat: 37.5665
+    default_ground_lon: 126.9780
+    default_ground_alt: 30.0
+
+    # Sensor Fusion
+    complementary_alpha: 0.98
+    mag_declination_deg: -8.0
+    kalman_q_process: 0.01
+    kalman_r_measurement: 1.0
+
+    # PID: Simulation gains (softer for Gazebo dynamics)
+    az_pos_kp: 10.0
+    az_pos_ki: 0.05
+    az_pos_kd: 0.2
+    az_vel_kp: 3.0
+    az_vel_ki: 0.02
+    az_vel_kd: 0.05
+    el_pos_kp: 6.0
+    el_pos_ki: 0.5
+    el_pos_kd: 0.15
+    el_vel_kp: 3.0
+    el_vel_ki: 0.1
+    el_vel_kd: 0.05
+
+    # Angle Limits
+    azimuth_min_deg: 0.0
+    azimuth_max_deg: 360.0
+    elevation_min_deg: 0.0
+    elevation_max_deg: 90.0
+
+    # Simulation-specific
+    motor_max_speed_dps: 180.0
+    motor_max_accel_dps2: 720.0
+    command_deadzone: 18.0
+    disturbance_dps2: 0.25
+
+    # Timeouts (relaxed for simulation)
+    imu_timeout_sec: 5.0
+    lora_timeout_sec: 30.0
+    diagnostics_rate_hz: 1.0

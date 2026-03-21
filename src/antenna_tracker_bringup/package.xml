@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>antenna_tracker_bringup</name>
+  <version>1.0.0</version>
+  <description>Launch files and configuration for antenna tracker system</description>
+  <maintainer email="hyeonsu@uniqstar.com">Hyeonsu Park</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>antenna_tracker_msgs</exec_depend>
+  <exec_depend>antenna_tracker_hardware</exec_depend>
+  <exec_depend>antenna_tracker_controller</exec_depend>
+  <exec_depend>micro_ros_agent</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

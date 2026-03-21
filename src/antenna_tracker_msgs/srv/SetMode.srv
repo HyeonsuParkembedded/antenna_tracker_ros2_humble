@@ -1,0 +1,9 @@
+uint8 AUTO=0
+uint8 MANUAL=1
+uint8 STANDBY=2
+uint8 EMERGENCY=3
+uint8 mode
+---
+bool success
+string message
+uint8 previous_mode

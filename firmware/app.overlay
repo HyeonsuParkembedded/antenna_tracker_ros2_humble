@@ -1,0 +1,46 @@
+/ {
+    zephyr,user {
+        microros_serial_uart = &usart3;
+    };
+
+    stepper_motors {
+        compatible = "gpio-leds"; /* Using generic GPIO output */
+        az_step: az_step {
+            gpios = <&gpiod 14 GPIO_ACTIVE_HIGH>; /* D11 */
+        };
+        az_dir: az_dir {
+            gpios = <&gpiod 15 GPIO_ACTIVE_HIGH>; /* D10 */
+        };
+        az_en: az_en {
+            gpios = <&gpioe 9 GPIO_ACTIVE_LOW>;   /* D6 */
+        };
+
+        el_step: el_step {
+            gpios = <&gpioe 11 GPIO_ACTIVE_HIGH>; /* D5 */
+        };
+        el_dir: el_dir {
+            gpios = <&gpiof 14 GPIO_ACTIVE_HIGH>; /* D4 */
+        };
+        el_en: el_en {
+            gpios = <&gpioe 13 GPIO_ACTIVE_LOW>;  /* D3 */
+        };
+    };
+};
+
+&i2c1 {
+    status = "okay";
+    pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb9>;
+    pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_FAST>;
+
+    /* Minimal definitions to lock the I2C bus address if needed, or we just access it raw from code */
+    as5600_az: as5600@36 {
+        compatible = "i2c-device";
+        reg = <0x36>;
+    };
+
+    bno055: bno055@28 {
+        compatible = "i2c-device";
+        reg = <0x28>;
+    };
+};

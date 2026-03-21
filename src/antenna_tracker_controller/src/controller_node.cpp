@@ -1,0 +1,227 @@
+#include "antenna_tracker_controller/controller_node.hpp"
+#include <cmath>
+
+namespace antenna_tracker_controller
+{
+
+ControllerNode::ControllerNode(const rclcpp::NodeOptions & options)
+: Node("controller_node", options)
+{
+  declare_parameter<double>("loop_rate_hz", 100.0);
+  declare_parameter<double>("az_pos_kp", 15.0);
+  declare_parameter<double>("az_pos_ki", 0.1);
+  declare_parameter<double>("az_pos_kd", 0.3);
+  declare_parameter<double>("az_vel_kp", 4.0);
+  declare_parameter<double>("az_vel_ki", 0.05);
+  declare_parameter<double>("az_vel_kd", 0.1);
+  declare_parameter<double>("el_pos_kp", 8.0);
+  declare_parameter<double>("el_pos_ki", 1.0);
+  declare_parameter<double>("el_pos_kd", 0.2);
+  declare_parameter<double>("el_vel_kp", 5.0);
+  declare_parameter<double>("el_vel_ki", 0.15);
+  declare_parameter<double>("el_vel_kd", 0.08);
+  declare_parameter<double>("azimuth_min_deg", 0.0);
+  declare_parameter<double>("azimuth_max_deg", 360.0);
+  declare_parameter<double>("elevation_min_deg", 0.0);
+  declare_parameter<double>("elevation_max_deg", 90.0);
+
+  double loop_rate = get_parameter("loop_rate_hz").as_double();
+  double dt = 1.0 / loop_rate;
+
+  mpc_.init();
+
+  sub_fusion_ = create_subscription<antenna_tracker_msgs::msg::ImuFusion>(
+    "/antenna/imu_fusion", rclcpp::SensorDataQoS(),
+    std::bind(&ControllerNode::imu_fusion_callback, this, std::placeholders::_1));
+
+  sub_encoder_ = create_subscription<antenna_tracker_msgs::msg::EncoderFeedback>(
+    "/antenna/encoder_feedback", rclcpp::SensorDataQoS(),
+    std::bind(&ControllerNode::encoder_callback, this, std::placeholders::_1));
+
+  sub_target_az_ = create_subscription<std_msgs::msg::Float64>(
+    "/antenna/target_azimuth", 10,
+    std::bind(&ControllerNode::target_az_callback, this, std::placeholders::_1));
+
+  sub_target_el_ = create_subscription<std_msgs::msg::Float64>(
+    "/antenna/target_elevation", 10,
+    std::bind(&ControllerNode::target_el_callback, this, std::placeholders::_1));
+
+  pub_motor_ = create_publisher<antenna_tracker_msgs::msg::MotorCommand>(
+    "/antenna/motor_cmd", rclcpp::SensorDataQoS());
+
+  pub_state_ = create_publisher<antenna_tracker_msgs::msg::AntennaState>(
+    "/antenna/state", 10);
+
+  auto period = std::chrono::duration<double>(dt);
+  control_timer_ = create_wall_timer(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(period),
+    std::bind(&ControllerNode::control_timer_callback, this));
+
+  action_server_ = rclcpp_action::create_server<TrackTarget>(
+    this, "/antenna/track_target",
+    std::bind(&ControllerNode::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
+    std::bind(&ControllerNode::handle_cancel, this, std::placeholders::_1),
+    std::bind(&ControllerNode::handle_accepted, this, std::placeholders::_1));
+
+  RCLCPP_INFO(get_logger(), "ControllerNode initialized (%.0f Hz)", loop_rate);
+}
+
+void ControllerNode::imu_fusion_callback(
+  const antenna_tracker_msgs::msg::ImuFusion::SharedPtr msg)
+{
+  current_azimuth_ = msg->azimuth;
+  current_elevation_ = msg->elevation;
+  az_velocity_ = msg->az_velocity;
+  el_velocity_ = msg->el_velocity;
+  fusion_valid_ = msg->kalman_valid;
+}
+
+void ControllerNode::encoder_callback(
+  const antenna_tracker_msgs::msg::EncoderFeedback::SharedPtr msg)
+{
+  /* Encoder can override IMU for position if valid */
+  if (msg->az_valid && msg->el_valid) {
+    /* Blend encoder position with IMU (encoder is more reliable for position) */
+    current_azimuth_ = msg->az_angle_deg;
+    current_elevation_ = msg->el_angle_deg;
+    az_velocity_ = msg->az_velocity_dps;
+    el_velocity_ = msg->el_velocity_dps;
+  }
+}
+
+void ControllerNode::target_az_callback(const std_msgs::msg::Float64::SharedPtr msg)
+{
+  target_azimuth_ = msg->data;
+}
+
+void ControllerNode::target_el_callback(const std_msgs::msg::Float64::SharedPtr msg)
+{
+  target_elevation_ = msg->data;
+}
+
+void ControllerNode::control_timer_callback()
+{
+  if (!tracking_enabled_ || !fusion_valid_) {
+    /* Publish zero command */
+    auto cmd = antenna_tracker_msgs::msg::MotorCommand();
+    cmd.header.stamp = now();
+    cmd.emergency_stop = !tracking_enabled_;
+    pub_motor_->publish(cmd);
+    return;
+  }
+
+  double az_cmd = 0.0, el_cmd = 0.0;
+  mpc_.compute(
+    target_azimuth_, current_azimuth_, az_velocity_,
+    target_elevation_, current_elevation_, el_velocity_,
+    az_cmd, el_cmd);
+
+  /* Safety limits */
+  double az_min = get_parameter("azimuth_min_deg").as_double();
+  double az_max = get_parameter("azimuth_max_deg").as_double();
+  double el_min = get_parameter("elevation_min_deg").as_double();
+  double el_max = get_parameter("elevation_max_deg").as_double();
+
+  if (current_azimuth_ < az_min || current_azimuth_ > az_max) {
+    az_cmd = 0.0;
+  }
+  if (current_elevation_ < el_min || current_elevation_ > el_max) {
+    el_cmd = 0.0;
+  }
+
+  /* Publish motor command */
+  auto motor_msg = antenna_tracker_msgs::msg::MotorCommand();
+  motor_msg.header.stamp = now();
+  motor_msg.az_frequency_hz = std::abs(az_cmd);
+  motor_msg.el_frequency_hz = std::abs(el_cmd);
+  motor_msg.az_direction = (az_cmd >= 0.0);
+  motor_msg.el_direction = (el_cmd >= 0.0);
+  motor_msg.emergency_stop = false;
+  pub_motor_->publish(motor_msg);
+
+  /* Publish antenna state */
+  auto state_msg = antenna_tracker_msgs::msg::AntennaState();
+  state_msg.header.stamp = now();
+  state_msg.current_azimuth = current_azimuth_;
+  state_msg.current_elevation = current_elevation_;
+  state_msg.target_azimuth = target_azimuth_;
+  state_msg.target_elevation = target_elevation_;
+  state_msg.az_error = target_azimuth_ - current_azimuth_;
+  state_msg.el_error = target_elevation_ - current_elevation_;
+  state_msg.az_motor_cmd = az_cmd;
+  state_msg.el_motor_cmd = el_cmd;
+  pub_state_->publish(state_msg);
+
+  /* Action feedback */
+  if (active_goal_) {
+    auto feedback = std::make_shared<TrackTarget::Feedback>();
+    feedback->current_azimuth = current_azimuth_;
+    feedback->current_elevation = current_elevation_;
+    feedback->az_error = target_azimuth_ - current_azimuth_;
+    feedback->el_error = target_elevation_ - current_elevation_;
+    active_goal_->publish_feedback(feedback);
+
+    /* Check completion */
+    auto goal = active_goal_->get_goal();
+    double error = std::sqrt(
+      feedback->az_error * feedback->az_error +
+      feedback->el_error * feedback->el_error);
+
+    double elapsed = (now() - goal_start_time_).seconds();
+
+    if (error <= goal->tolerance_deg) {
+      auto result = std::make_shared<TrackTarget::Result>();
+      result->success = true;
+      result->final_azimuth = current_azimuth_;
+      result->final_elevation = current_elevation_;
+      result->tracking_duration_sec = elapsed;
+      active_goal_->succeed(result);
+      active_goal_.reset();
+    } else if (elapsed > goal->timeout_sec) {
+      auto result = std::make_shared<TrackTarget::Result>();
+      result->success = false;
+      result->final_azimuth = current_azimuth_;
+      result->final_elevation = current_elevation_;
+      result->tracking_duration_sec = elapsed;
+      active_goal_->abort(result);
+      active_goal_.reset();
+    }
+  }
+}
+
+rclcpp_action::GoalResponse ControllerNode::handle_goal(
+  const rclcpp_action::GoalUUID &,
+  std::shared_ptr<const TrackTarget::Goal> goal)
+{
+  RCLCPP_INFO(get_logger(), "TrackTarget goal: az=%.1f, el=%.1f, tol=%.1f",
+              goal->target_azimuth_deg, goal->target_elevation_deg, goal->tolerance_deg);
+  return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse ControllerNode::handle_cancel(
+  const std::shared_ptr<GoalHandleTrackTarget>)
+{
+  RCLCPP_INFO(get_logger(), "TrackTarget goal cancelled");
+  return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void ControllerNode::handle_accepted(
+  const std::shared_ptr<GoalHandleTrackTarget> goal_handle)
+{
+  active_goal_ = goal_handle;
+  goal_start_time_ = now();
+
+  auto goal = goal_handle->get_goal();
+  target_azimuth_ = goal->target_azimuth_deg;
+  target_elevation_ = goal->target_elevation_deg;
+}
+
+}  // namespace antenna_tracker_controller
+
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<antenna_tracker_controller::ControllerNode>());
+  rclcpp::shutdown();
+  return 0;
+}

@@ -1,0 +1,48 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/antenna_tracker_env
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        if: github.event_name == 'push'
+
+      - name: Build Docker Image (Local/Cache)
+        run: |
+          docker build -t antenna_tracker_env docker/
+
+      - name: Build ROS 2 Workspace
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -c "cd /ros2_ws && source /opt/ros/humble/setup.bash && colcon build"
+
+      - name: Run ROS 2 Tests
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -c "cd /ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && colcon test && colcon test-result"
+
+      - name: Push Docker image (CD)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag antenna_tracker_env ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
