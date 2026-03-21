@@ -56,55 +56,77 @@ void SensorFusionNode::mag_callback(const sensor_msgs::msg::MagneticField::Share
   mag_received_ = true;
 }
 
+
 void SensorFusionNode::timer_callback()
 {
-  if (!imu_received_ || !mag_received_) {
-    return;
+  if (!imu_received_) {
+    return;  /* Wait for first IMU sample */
   }
 
-  double timestamp = latest_imu_->header.stamp.sec +
-                     latest_imu_->header.stamp.nanosec * 1e-9;
+  /* ── FIX: BNO055 emits absolute orientation in /imu/raw quaternion.
+   *  Use it directly so fusion works without a separate /magnetic_field topic. ── */
+  const auto & q = latest_imu_->orientation;
 
-  /* IMU angular velocity: rad/s -> deg/s for complementary filter */
-  double gyro_x = latest_imu_->angular_velocity.x * 57.29577951;
-  double gyro_y = latest_imu_->angular_velocity.y * 57.29577951;
-  double gyro_z = latest_imu_->angular_velocity.z * 57.29577951;
+  /* Quaternion → roll/pitch/yaw(azimuth) in degrees */
+  double sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z);
+  double cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y);
+  double roll_deg  = std::atan2(sinr_cosp, cosr_cosp) * 57.29577951;
 
-  /* Magnetometer: T -> uT for filter */
-  double mag_x = latest_mag_->magnetic_field.x * 1e6;
-  double mag_y = latest_mag_->magnetic_field.y * 1e6;
-  double mag_z = latest_mag_->magnetic_field.z * 1e6;
+  double sinp      = 2.0 * (q.w * q.y - q.z * q.x);
+  double pitch_deg = std::asin(std::clamp(sinp, -1.0, 1.0)) * 57.29577951;
 
-  comp_filter_.update(
-    latest_imu_->linear_acceleration.x,
-    latest_imu_->linear_acceleration.y,
-    latest_imu_->linear_acceleration.z,
-    gyro_x, gyro_y, gyro_z,
-    mag_x, mag_y, mag_z,
-    timestamp);
+  double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+  double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+  double yaw_deg   = std::atan2(siny_cosp, cosy_cosp) * 57.29577951;
+  if (yaw_deg < 0.0) yaw_deg += 360.0;
 
-  const auto & orient = comp_filter_.orientation();
+  double azimuth_deg   = yaw_deg;
+  double elevation_deg = -pitch_deg;  /* flip: nose-up = positive elevation */
 
-  /* Kalman filter for smoothed azimuth/elevation + velocity estimation */
-  kalman_filter_.update(orient.azimuth, orient.elevation);
+  /* Optional: blend with compass via complementary filter if mag is available */
+  if (mag_received_) {
+    double timestamp = latest_imu_->header.stamp.sec +
+                       latest_imu_->header.stamp.nanosec * 1e-9;
+    double gyro_x = latest_imu_->angular_velocity.x * 57.29577951;
+    double gyro_y = latest_imu_->angular_velocity.y * 57.29577951;
+    double gyro_z = latest_imu_->angular_velocity.z * 57.29577951;
+    double mag_x  = latest_mag_->magnetic_field.x * 1e6;
+    double mag_y  = latest_mag_->magnetic_field.y * 1e6;
+    double mag_z  = latest_mag_->magnetic_field.z * 1e6;
+
+    comp_filter_.update(
+      latest_imu_->linear_acceleration.x,
+      latest_imu_->linear_acceleration.y,
+      latest_imu_->linear_acceleration.z,
+      gyro_x, gyro_y, gyro_z,
+      mag_x, mag_y, mag_z,
+      timestamp);
+
+    const auto & orient = comp_filter_.orientation();
+    azimuth_deg   = orient.azimuth;   /* compass-corrected */
+    elevation_deg = orient.elevation;
+  }
+
+  kalman_filter_.update(azimuth_deg, elevation_deg);
   kalman_initialized_ = true;
 
   auto msg = antenna_tracker_msgs::msg::ImuFusion();
-  msg.header.stamp = now();
+  msg.header.stamp    = now();
   msg.header.frame_id = "imu_link";
-  msg.roll = orient.roll;
-  msg.pitch = orient.pitch;
-  msg.yaw = orient.yaw;
-  msg.azimuth = kalman_filter_.azimuth();
+  msg.roll      = roll_deg;
+  msg.pitch     = pitch_deg;
+  msg.yaw       = yaw_deg;
+  msg.azimuth   = kalman_filter_.azimuth();
   msg.elevation = kalman_filter_.elevation();
-  msg.az_velocity = kalman_filter_.az_velocity();
-  msg.el_velocity = kalman_filter_.el_velocity();
-  msg.kalman_valid = kalman_initialized_;
+  msg.az_velocity   = kalman_filter_.az_velocity();
+  msg.el_velocity   = kalman_filter_.el_velocity();
+  msg.kalman_valid  = kalman_initialized_;
 
   pub_fusion_->publish(msg);
 }
 
 }  // namespace antenna_tracker_controller
+
 
 int main(int argc, char ** argv)
 {

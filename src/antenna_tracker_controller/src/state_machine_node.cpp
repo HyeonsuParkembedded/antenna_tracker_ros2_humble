@@ -30,6 +30,13 @@ StateMachineNode::StateMachineNode(const rclcpp::NodeOptions & options)
   pub_diagnostics_ = create_publisher<antenna_tracker_msgs::msg::TrackerDiagnostics>(
     "/antenna/diagnostics", 10);
 
+  /* Publish current mode so controller_node can sync tracking_enabled_ */
+  pub_mode_ = create_publisher<std_msgs::msg::UInt8>("/antenna/mode", 10);
+
+  /* Publish manual targets for controller_node */
+  pub_target_az_ = create_publisher<std_msgs::msg::Float64>("/antenna/target_azimuth", 10);
+  pub_target_el_ = create_publisher<std_msgs::msg::Float64>("/antenna/target_elevation", 10);
+
   srv_set_mode_ = create_service<antenna_tracker_msgs::srv::SetMode>(
     "/antenna/set_mode",
     std::bind(&StateMachineNode::set_mode_callback, this,
@@ -98,10 +105,11 @@ void StateMachineNode::diagnostics_timer_callback()
   double target_age = (now() - last_target_time_).seconds();
 
   diag.imu_ok = (imu_age < imu_timeout);
-  diag.mag_ok = diag.imu_ok; /* Mag comes with IMU */
+  diag.mag_ok = diag.imu_ok;  /* BNO055 mag comes with IMU data */
   diag.encoder_ok = (encoder_age < imu_timeout);
   diag.can_ok = (target_age < lora_timeout);
-  diag.gps_ok = true; /* GPS is optional for ground station */
+  /* ── FIX: gps_ok reflects actual ground GPS reception state ── */
+  diag.gps_ok = ground_gps_valid_;
 
   /* CPU temperature (RPi4B thermal zone) */
   std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
@@ -124,6 +132,11 @@ void StateMachineNode::diagnostics_timer_callback()
     RCLCPP_WARN(get_logger(), "IMU timeout! Entering EMERGENCY mode");
     current_mode_ = OperationMode::EMERGENCY;
   }
+
+  /* ── FIX: Publish current mode so controller_node stays in sync ── */
+  auto mode_msg = std_msgs::msg::UInt8();
+  mode_msg.data = static_cast<uint8_t>(current_mode_);
+  pub_mode_->publish(mode_msg);
 }
 
 void StateMachineNode::set_mode_callback(
@@ -158,6 +171,12 @@ void StateMachineNode::set_mode_callback(
   response->success = true;
   response->message = std::string("Mode set to ") + mode_name(new_mode);
   response->previous_mode = prev;
+
+  /* ── FIX: Immediately publish new mode for controller_node ── */
+  auto mode_msg = std_msgs::msg::UInt8();
+  mode_msg.data = static_cast<uint8_t>(current_mode_);
+  pub_mode_->publish(mode_msg);
+  RCLCPP_INFO(get_logger(), "Published /antenna/mode: %d", mode_msg.data);
 }
 
 void StateMachineNode::set_manual_target_callback(
@@ -177,6 +196,15 @@ void StateMachineNode::set_manual_target_callback(
     response->message = "Target out of range";
     return;
   }
+
+  /* ── FIX: Actually publish the manual targets ── */
+  auto az_msg = std_msgs::msg::Float64();
+  az_msg.data = request->azimuth_deg;
+  pub_target_az_->publish(az_msg);
+
+  auto el_msg = std_msgs::msg::Float64();
+  el_msg.data = request->elevation_deg;
+  pub_target_el_->publish(el_msg);
 
   response->success = true;
   response->message = "Manual target set";

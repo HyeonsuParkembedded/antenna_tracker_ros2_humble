@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/float64.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 #include <antenna_tracker_msgs/msg/imu_fusion.hpp>
 #include <antenna_tracker_msgs/msg/encoder_feedback.hpp>
 #include <antenna_tracker_msgs/msg/motor_command.hpp>
@@ -27,6 +28,7 @@ private:
   void encoder_callback(const antenna_tracker_msgs::msg::EncoderFeedback::SharedPtr msg);
   void target_az_callback(const std_msgs::msg::Float64::SharedPtr msg);
   void target_el_callback(const std_msgs::msg::Float64::SharedPtr msg);
+  void mode_callback(const std_msgs::msg::UInt8::SharedPtr msg);
   void control_timer_callback();
 
   /* Action server callbacks */
@@ -41,6 +43,7 @@ private:
   rclcpp::Subscription<antenna_tracker_msgs::msg::EncoderFeedback>::SharedPtr sub_encoder_;
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr sub_target_az_;
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr sub_target_el_;
+  rclcpp::Subscription<std_msgs::msg::UInt8>::SharedPtr sub_mode_;
   rclcpp::Publisher<antenna_tracker_msgs::msg::MotorCommand>::SharedPtr pub_motor_;
   rclcpp::Publisher<antenna_tracker_msgs::msg::AntennaState>::SharedPtr pub_state_;
   rclcpp::TimerBase::SharedPtr control_timer_;
@@ -55,7 +58,8 @@ private:
   double target_azimuth_{0.0};
   double target_elevation_{0.0};
   bool fusion_valid_{false};
-  bool tracking_enabled_{true};
+  bool tracking_enabled_{false};  /* false by default — must receive AUTO mode */
+  uint8_t current_mode_{2};       /* 2 = STANDBY */
 
   /* Active goal */
   std::shared_ptr<GoalHandleTrackTarget> active_goal_;

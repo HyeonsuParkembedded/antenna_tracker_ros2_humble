@@ -10,6 +10,8 @@
 #include <antenna_tracker_msgs/srv/set_mode.hpp>
 #include <antenna_tracker_msgs/srv/set_manual_target.hpp>
 #include <antenna_tracker_msgs/srv/get_status.hpp>
+#include <std_msgs/msg/u_int8.hpp>
+#include <std_msgs/msg/float64.hpp>
 
 namespace antenna_tracker_controller
 {
@@ -51,6 +53,9 @@ private:
   rclcpp::Subscription<antenna_tracker_msgs::msg::TargetGPS>::SharedPtr sub_target_;
 
   rclcpp::Publisher<antenna_tracker_msgs::msg::TrackerDiagnostics>::SharedPtr pub_diagnostics_;
+  rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr pub_mode_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_target_az_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_target_el_;
 
   rclcpp::Service<antenna_tracker_msgs::srv::SetMode>::SharedPtr srv_set_mode_;
   rclcpp::Service<antenna_tracker_msgs::srv::SetManualTarget>::SharedPtr srv_manual_target_;
@@ -68,6 +73,7 @@ private:
   rclcpp::Time last_target_time_;
   uint64_t loop_count_{0};
   rclcpp::Time loop_start_time_;
+  bool ground_gps_valid_{false};  /* true once /gps/fix is received */
 };
 
 }  // namespace antenna_tracker_controller

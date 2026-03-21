@@ -76,7 +76,12 @@ void MpcController::compute(
 
   int status = antenna_tracker_acados_solve(acados_capsule_);
   if (status != 0) {
-    std::cerr << "antenna_tracker_acados_solve() failed with status " << status << std::endl;
+    /* ── FIX: Zero outputs on solver failure — never return garbage ── */
+    az_output = 0.0;
+    el_output = 0.0;
+    std::cerr << "[MpcController] acados_solve() failed (status=" << status
+              << ") — holding zero command." << std::endl;
+    return;
   }
 
   double u_out[ANTENNA_TRACKER_NU];

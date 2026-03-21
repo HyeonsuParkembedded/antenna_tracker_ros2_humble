@@ -46,6 +46,11 @@ ControllerNode::ControllerNode(const rclcpp::NodeOptions & options)
     "/antenna/target_elevation", 10,
     std::bind(&ControllerNode::target_el_callback, this, std::placeholders::_1));
 
+  /* Subscribe to mode from state_machine_node */
+  sub_mode_ = create_subscription<std_msgs::msg::UInt8>(
+    "/antenna/mode", 10,
+    std::bind(&ControllerNode::mode_callback, this, std::placeholders::_1));
+
   pub_motor_ = create_publisher<antenna_tracker_msgs::msg::MotorCommand>(
     "/antenna/motor_cmd", rclcpp::SensorDataQoS());
 
@@ -99,6 +104,13 @@ void ControllerNode::target_el_callback(const std_msgs::msg::Float64::SharedPtr 
   target_elevation_ = msg->data;
 }
 
+void ControllerNode::mode_callback(const std_msgs::msg::UInt8::SharedPtr msg)
+{
+  current_mode_ = msg->data;
+  /* Enable tracking only in AUTO mode (0) */
+  tracking_enabled_ = (current_mode_ == 0);
+}
+
 void ControllerNode::control_timer_callback()
 {
   if (!tracking_enabled_ || !fusion_valid_) {
@@ -110,9 +122,15 @@ void ControllerNode::control_timer_callback()
     return;
   }
 
+  /* ── FIX: Shortest-path wrap-around for azimuth (359°→1° = +2°, not -358°) ── */
+  double az_error_raw = target_azimuth_ - current_azimuth_;
+  while (az_error_raw >  180.0) az_error_raw -= 360.0;
+  while (az_error_raw < -180.0) az_error_raw += 360.0;
+  double effective_az_target = current_azimuth_ + az_error_raw;
+
   double az_cmd = 0.0, el_cmd = 0.0;
   mpc_.compute(
-    target_azimuth_, current_azimuth_, az_velocity_,
+    effective_az_target, current_azimuth_, az_velocity_,
     target_elevation_, current_elevation_, el_velocity_,
     az_cmd, el_cmd);
 
@@ -146,10 +164,12 @@ void ControllerNode::control_timer_callback()
   state_msg.current_elevation = current_elevation_;
   state_msg.target_azimuth = target_azimuth_;
   state_msg.target_elevation = target_elevation_;
-  state_msg.az_error = target_azimuth_ - current_azimuth_;
+  state_msg.az_error = az_error_raw;   /* wrap-around corrected error */
   state_msg.el_error = target_elevation_ - current_elevation_;
   state_msg.az_motor_cmd = az_cmd;
   state_msg.el_motor_cmd = el_cmd;
+  state_msg.mode = current_mode_;
+  state_msg.tracking_active = tracking_enabled_;
   pub_state_->publish(state_msg);
 
   /* Action feedback */
