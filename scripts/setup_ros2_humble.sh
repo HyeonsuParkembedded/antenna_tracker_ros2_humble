@@ -56,7 +56,39 @@ if ! grep -q "$SETUP_LINE" ~/.bashrc; then
     echo "$SETUP_LINE" >> ~/.bashrc
 fi
 
-# Step 6: Set DDS middleware
+# Step 6: Install Acados (Required for NMPC Controller)
+echo "--- Installing Acados NMPC Solver ---"
+sudo apt-get install -y cmake make gcc g++ python3-pip
+if [ ! -d "/opt/acados" ]; then
+    echo "Cloning and building Acados..."
+    sudo mkdir -p /opt/acados
+    sudo chown $USER:$USER /opt/acados
+    git clone https://github.com/acados/acados.git /opt/acados
+    cd /opt/acados
+    git submodule update --recursive --init
+    mkdir -p build && cd build
+    cmake -DACADOS_WITH_QPOASES=ON -DACADOS_WITH_OSQP=ON ..
+    make install -j$(nproc)
+    
+    # Install Python interface
+    pip3 install -e /opt/acados/interfaces/acados_template
+else
+    echo "Acados already installed in /opt/acados"
+fi
+
+# Step 7: Set Acados environment variables
+echo "--- Configuring shell for Acados ---"
+ACADOS_SRC="export ACADOS_SOURCE_DIR=/opt/acados"
+LD_LIB="export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/opt/acados/lib"
+
+if ! grep -q "$ACADOS_SRC" ~/.bashrc; then
+    echo "$ACADOS_SRC" >> ~/.bashrc
+fi
+if ! grep -q "/opt/acados/lib" ~/.bashrc; then
+    echo "$LD_LIB" >> ~/.bashrc
+fi
+
+# Step 8: Set DDS middleware
 DDS_LINE="export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
 if ! grep -q "$DDS_LINE" ~/.bashrc; then
     echo "$DDS_LINE" >> ~/.bashrc
