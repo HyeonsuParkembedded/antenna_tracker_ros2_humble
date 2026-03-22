@@ -379,7 +379,6 @@ chosen {
 
 **3. `prj.conf`** — 변경 없음
 
-> ⚠️ Arduino UNO R4는 I/O 전압이 3.3V입니다. TB6600 스테퍼 드라이버 입력이 5V 톨러런트인지 확인하세요.
 > ⚠️ 정확한 핀 번호는 [RA4M1 데이터시트](https://www.renesas.com/us/en/products/microcontrollers-microprocessors/ra-cortex-m-mcus/ra4m1-32-bit-microcontrollers-48mhz-arm-cortex-m4) 및 보드 회로도를 반드시 대조하세요.
 
 ---
