@@ -144,24 +144,143 @@ source install/setup.bash
 
 ### 펌웨어 빌드 및 플래시
 
+#### Zephyr SDK 설치 (최초 1회, Linux/WSL2 공통)
+
 ```bash
-# Zephyr 환경 활성화 (공통)
+# Python 가상환경 + west
+python3 -m venv ~/zephyrproject/.venv
+source ~/zephyrproject/.venv/bin/activate
+pip install west
+
+# Zephyr 소스 및 SDK
+west init ~/zephyrproject
+cd ~/zephyrproject
+west update
+west zephyr-export
+pip install -r zephyr/scripts/requirements.txt
+
+# Zephyr SDK 0.16.8 다운로드 및 설치
+cd ~
+wget https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.8/zephyr-sdk-0.16.8_linux-x86_64.tar.xz
+tar xf zephyr-sdk-0.16.8_linux-x86_64.tar.xz -C ~/zephyrproject/
+cd ~/zephyrproject/zephyr-sdk-0.16.8
+./setup.sh
+```
+
+---
+
+#### STM32H7 Nucleo 플래시
+
+##### Linux (권장)
+
+```bash
+# ST-Link udev 규칙 등록 (최초 1회)
+sudo cp ~/zephyrproject/zephyr-sdk-0.16.8/sysroots/x86_64-pokysdk-linux/usr/share/openocd/contrib/60-openocd.rules /etc/udev/rules.d/
+sudo udevadm control --reload
+
+# 빌드 및 플래시
 source ~/zephyrproject/.venv/bin/activate
 source ~/zephyrproject/zephyr/zephyr-env.sh
 
-# STM32H7 Nucleo (FDCAN1 CAN 버스)
 cd firmware
 west build -b nucleo_h7a3zi_q
-west flash   # ST-Link 내장, 자동 감지
+west flash   # Nucleo 내장 ST-Link 자동 감지
+```
 
-# TTGO LoRa 32 V2.1 (ESP32 TWAI + SX1276 LoRa)
+##### Windows (STM32CubeProgrammer)
+
+1. [STM32CubeProgrammer](https://www.st.com/en/development-tools/stm32cubeprog.html) 설치
+2. Nucleo USB 연결 → ST-LINK 드라이버 자동 설치
+3. STM32CubeProgrammer 실행:
+   - Interface: **ST-LINK** → Connect
+   - `firmware/build/zephyr/zephyr.bin` 파일 선택
+   - Start address: `0x08000000`
+   - **Download** 클릭
+
+##### Windows (west + usbipd-win)
+
+```powershell
+# 1. usbipd-win 설치 (PowerShell 관리자)
+winget install usbipd
+
+# 2. Nucleo 연결 후 장치 확인
+usbipd list
+# → STMicroelectronics STLink Virtual COM Port 항목의 BUSID 확인 (예: 2-3)
+
+# 3. WSL2로 연결
+usbipd bind --busid 2-3
+usbipd attach --wsl --busid 2-3
+
+# 4. WSL2 터미널에서 west flash
+source ~/zephyrproject/.venv/bin/activate
+source ~/zephyrproject/zephyr/zephyr-env.sh
+cd firmware
+west flash
+```
+
+---
+
+#### TTGO LoRa 32 V2.1 (ESP32) 플래시
+
+##### Linux (권장)
+
+```bash
+# CP210x USB-Serial 드라이버 확인
+ls /dev/ttyUSB*   # → /dev/ttyUSB0 확인
+sudo usermod -aG dialout $USER   # 권한 추가 (재로그인 필요)
+
+# 빌드 및 플래시
+source ~/zephyrproject/.venv/bin/activate
+source ~/zephyrproject/zephyr/zephyr-env.sh
+
 cd firmware_esp32
 west build -b esp32_devkitc_wroom/esp32/procpu
-west flash --esp-device /dev/ttyUSB0   # USB 포트 확인 후 입력
+west flash --esp-device /dev/ttyUSB0
+
+# 시리얼 모니터
+west espressif monitor --esp-device /dev/ttyUSB0
+```
+
+##### Windows (esptool.py — 가장 간단)
+
+```powershell
+# 1. Python + esptool 설치
+pip install esptool
+
+# 2. TTGO 연결 → 장치 관리자에서 COM 포트 확인 (예: COM5)
+
+# 3. 빌드된 바이너리 위치
+#    firmware_esp32/build/zephyr/zephyr.bin
+
+# 4. 플래시
+esptool.py --chip esp32 --port COM5 --baud 921600 `
+  write_flash `
+  0x1000  firmware_esp32/build/zephyr/bootloader/esp-idf/components/bootloader/subproject/main/bootloader.bin `
+  0x8000  firmware_esp32/build/zephyr/partitions_singleapp.bin `
+  0x10000 firmware_esp32/build/zephyr/zephyr.bin
+```
+
+##### Windows (west + usbipd-win)
+
+```powershell
+# 1. TTGO 연결 후 BUSID 확인
+usbipd list   # → Silicon Labs CP210x ... BUSID 확인 (예: 3-1)
+
+# 2. WSL2로 연결
+usbipd bind --busid 3-1
+usbipd attach --wsl --busid 3-1
+
+# 3. WSL2 터미널에서 west flash
+source ~/zephyrproject/.venv/bin/activate
+source ~/zephyrproject/zephyr/zephyr-env.sh
+cd firmware_esp32
+west flash --esp-device /dev/ttyUSB0
 ```
 
 > ⚠ TTGO TWAI는 외부 CAN 트랜시버(SN65HVD230 등)가 필요합니다.
 > GPIO32(TX), GPIO33(RX)에 트랜시버 연결 후 CAN 버스에 합류하세요.
+>
+> ⚠ 플래시 실패 시 TTGO의 BOOT 버튼을 누른 채 USB 연결하면 다운로드 모드로 진입합니다.
 
 ---
 
