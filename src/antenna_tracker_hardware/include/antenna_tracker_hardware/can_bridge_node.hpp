@@ -3,6 +3,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include <antenna_tracker_msgs/msg/balloon_telemetry.hpp>
 #include <antenna_tracker_msgs/msg/encoder_feedback.hpp>
 #include <antenna_tracker_msgs/msg/motor_command.hpp>
 #include <antenna_tracker_msgs/msg/target_gps.hpp>
@@ -30,6 +31,15 @@ namespace antenna_tracker_hardware
  * RX (CAN → ROS 2):
  *   0x100  TARGET_GPS    → /antenna/target_gps         (ESP32 LoRa)
  *   0x101  TARGET_STATUS → (updates rssi/link quality)  (ESP32 LoRa)
+ *   0x102  BALLOON_UTC   → /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x103  BALLOON_ACCEL → /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x104  BALLOON_GYROMAG→/antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x105  BALLOON_ORIENT→ /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x106  BALLOON_ENV   → /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x107  BALLOON_PRESS → /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x108  BALLOON_AIR   → /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x109  BALLOON_SYS   → /antenna/balloon_telemetry  (ESP32 LoRa)
+ *   0x10A  BALLOON_META  → /antenna/balloon_telemetry  (ESP32 LoRa)
  *   0x200  ACCEL         → /imu/raw  (accel part)       (STM32H7)
  *   0x201  GYRO          → /imu/raw  (gyro part)        (STM32H7)
  *   0x202  MAG           → /magnetic_field              (STM32H7)
@@ -39,6 +49,9 @@ namespace antenna_tracker_hardware
  *
  * TX (ROS 2 → CAN):
  *   0x300  MOTOR_CMD     ← /antenna/motor_cmd           (to STM32H7)
+ *
+ * NOTE: CAN 필터 배열 크기는 17개로 설정해야 합니다.
+ *       (기존 8개: 0x100~0x101, 0x200~0x205 + 신규 9개: 0x102~0x10A)
  */
 class CanBridgeNode : public rclcpp::Node
 {
@@ -53,6 +66,18 @@ private:
   /* ESP32 LoRa frames */
   void process_target_gps(const struct can_frame & frame);
   void process_target_status(const struct can_frame & frame);
+
+  /* ESP32 LoRa balloon telemetry frames (0x102~0x10A) */
+  void process_balloon_utc(const struct can_frame & frame);
+  void process_balloon_accel(const struct can_frame & frame);
+  void process_balloon_gyromag(const struct can_frame & frame);
+  void process_balloon_orient(const struct can_frame & frame);
+  void process_balloon_env(const struct can_frame & frame);
+  void process_balloon_press(const struct can_frame & frame);
+  void process_balloon_air(const struct can_frame & frame);
+  void process_balloon_sys(const struct can_frame & frame);
+  void process_balloon_meta(const struct can_frame & frame);
+  void try_publish_balloon_telemetry();
 
   /* STM32H7 sensor frames */
   void process_accel(const struct can_frame & frame);
@@ -69,6 +94,16 @@ private:
   /* ── CAN ID constants ─────────────────────────────────────────────────── */
   static constexpr uint32_t CAN_ID_TARGET_GPS    = 0x100;
   static constexpr uint32_t CAN_ID_TARGET_STATUS = 0x101;
+  // ESP32 LoRa 확장 프레임 (0x102~0x10A)
+  static constexpr uint32_t CAN_ID_BALLOON_UTC     = 0x102;
+  static constexpr uint32_t CAN_ID_BALLOON_ACCEL   = 0x103;
+  static constexpr uint32_t CAN_ID_BALLOON_GYROMAG = 0x104;
+  static constexpr uint32_t CAN_ID_BALLOON_ORIENT  = 0x105;
+  static constexpr uint32_t CAN_ID_BALLOON_ENV     = 0x106;
+  static constexpr uint32_t CAN_ID_BALLOON_PRESS   = 0x107;
+  static constexpr uint32_t CAN_ID_BALLOON_AIR     = 0x108;
+  static constexpr uint32_t CAN_ID_BALLOON_SYS     = 0x109;
+  static constexpr uint32_t CAN_ID_BALLOON_META    = 0x10A;
   static constexpr uint32_t CAN_ID_ACCEL         = 0x200;
   static constexpr uint32_t CAN_ID_GYRO          = 0x201;
   static constexpr uint32_t CAN_ID_MAG           = 0x202;
@@ -83,6 +118,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::MagneticField>::SharedPtr         pub_mag_;
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr             pub_gps_;
   rclcpp::Publisher<antenna_tracker_msgs::msg::EncoderFeedback>::SharedPtr pub_encoder_;
+  rclcpp::Publisher<antenna_tracker_msgs::msg::BalloonTelemetry>::SharedPtr pub_balloon_telem_;
 
   /* ── ROS 2 subscriber ─────────────────────────────────────────────────── */
   rclcpp::Subscription<antenna_tracker_msgs::msg::MotorCommand>::SharedPtr sub_motor_cmd_;
@@ -100,6 +136,11 @@ private:
   /* ── Latest LoRa status fields (filled by 0x101, used in 0x100) ──────── */
   float   rssi_dbm_{0.0f};
   uint8_t link_quality_{0};
+
+  /* ── Balloon telemetry assembly (11 CAN frames → 1 ROS2 msg) ─────────── */
+  antenna_tracker_msgs::msg::BalloonTelemetry pending_balloon_;
+  uint16_t balloon_rx_mask_{0};           // 비트마스크: 수신된 프레임 추적
+  static constexpr uint16_t BALLOON_FULL_MASK = 0x07FFu;  // 0x100~0x10A = 11 bits
 };
 
 }  // namespace antenna_tracker_hardware

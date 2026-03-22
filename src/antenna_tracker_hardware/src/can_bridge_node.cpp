@@ -4,6 +4,19 @@
 namespace antenna_tracker_hardware
 {
 
+// balloon_rx_mask_ 비트 위치 (0x100=bit0 ~ 0x10A=bit10)
+static constexpr uint16_t BIT_GPS     = (1 << 0);
+static constexpr uint16_t BIT_STATUS  = (1 << 1);
+static constexpr uint16_t BIT_UTC     = (1 << 2);
+static constexpr uint16_t BIT_ACCEL   = (1 << 3);
+static constexpr uint16_t BIT_GYROMAG = (1 << 4);
+static constexpr uint16_t BIT_ORIENT  = (1 << 5);
+static constexpr uint16_t BIT_ENV     = (1 << 6);
+static constexpr uint16_t BIT_PRESS   = (1 << 7);
+static constexpr uint16_t BIT_AIR     = (1 << 8);
+static constexpr uint16_t BIT_SYS     = (1 << 9);
+static constexpr uint16_t BIT_META    = (1 << 10);
+
 CanBridgeNode::CanBridgeNode(const rclcpp::NodeOptions & options)
 : Node("can_bridge_node", options)
 {
@@ -25,6 +38,9 @@ CanBridgeNode::CanBridgeNode(const rclcpp::NodeOptions & options)
 
   pub_encoder_ = create_publisher<antenna_tracker_msgs::msg::EncoderFeedback>(
     "/antenna/encoder_feedback", rclcpp::SensorDataQoS());
+
+  pub_balloon_telem_ = create_publisher<antenna_tracker_msgs::msg::BalloonTelemetry>(
+    "/balloon/telemetry", rclcpp::SensorDataQoS());
 
   /* ── ROS 2 Subscriber: motor_cmd → CAN 0x300 ───────────────────────── */
   sub_motor_cmd_ = create_subscription<antenna_tracker_msgs::msg::MotorCommand>(
@@ -63,8 +79,8 @@ CanBridgeNode::CanBridgeNode(const rclcpp::NodeOptions & options)
     return;
   }
 
-  /* Receive all relevant IDs — ESP32 (0x100-0x101) + STM32H7 (0x200-0x205) */
-  struct can_filter rfilter[8];
+  /* Receive all relevant IDs — ESP32 (0x100-0x10A) + STM32H7 (0x200-0x205) */
+  struct can_filter rfilter[17];
   rfilter[0].can_id   = CAN_ID_TARGET_GPS;    rfilter[0].can_mask = CAN_SFF_MASK;
   rfilter[1].can_id   = CAN_ID_TARGET_STATUS;  rfilter[1].can_mask = CAN_SFF_MASK;
   rfilter[2].can_id   = CAN_ID_ACCEL;          rfilter[2].can_mask = CAN_SFF_MASK;
@@ -73,10 +89,19 @@ CanBridgeNode::CanBridgeNode(const rclcpp::NodeOptions & options)
   rfilter[5].can_id   = CAN_ID_GPS_FIX;        rfilter[5].can_mask = CAN_SFF_MASK;
   rfilter[6].can_id   = CAN_ID_ENCODER;        rfilter[6].can_mask = CAN_SFF_MASK;
   rfilter[7].can_id   = CAN_ID_HEARTBEAT;      rfilter[7].can_mask = CAN_SFF_MASK;
+  rfilter[8].can_id  = 0x102; rfilter[8].can_mask  = CAN_SFF_MASK;
+  rfilter[9].can_id  = 0x103; rfilter[9].can_mask  = CAN_SFF_MASK;
+  rfilter[10].can_id = 0x104; rfilter[10].can_mask = CAN_SFF_MASK;
+  rfilter[11].can_id = 0x105; rfilter[11].can_mask = CAN_SFF_MASK;
+  rfilter[12].can_id = 0x106; rfilter[12].can_mask = CAN_SFF_MASK;
+  rfilter[13].can_id = 0x107; rfilter[13].can_mask = CAN_SFF_MASK;
+  rfilter[14].can_id = 0x108; rfilter[14].can_mask = CAN_SFF_MASK;
+  rfilter[15].can_id = 0x109; rfilter[15].can_mask = CAN_SFF_MASK;
+  rfilter[16].can_id = 0x10A; rfilter[16].can_mask = CAN_SFF_MASK;
   setsockopt(can_socket_, SOL_CAN_RAW, CAN_RAW_FILTER, &rfilter, sizeof(rfilter));
 
   RCLCPP_INFO(get_logger(),
-    "CAN bridge on %s — RX: ESP32 (0x100-0x101) + STM32H7 (0x200-0x205), TX: 0x300",
+    "CAN bridge on %s — RX: ESP32 (0x100-0x10A) + STM32H7 (0x200-0x205), TX: 0x300",
     can_iface.c_str());
 
   running_ = true;
@@ -121,6 +146,15 @@ void CanBridgeNode::rx_thread_func()
       /* ESP32 LoRa */
       case CAN_ID_TARGET_GPS:    process_target_gps(frame);    break;
       case CAN_ID_TARGET_STATUS: process_target_status(frame); break;
+      case 0x102: process_balloon_utc(frame);     break;
+      case 0x103: process_balloon_accel(frame);   break;
+      case 0x104: process_balloon_gyromag(frame); break;
+      case 0x105: process_balloon_orient(frame);  break;
+      case 0x106: process_balloon_env(frame);     break;
+      case 0x107: process_balloon_press(frame);   break;
+      case 0x108: process_balloon_air(frame);     break;
+      case 0x109: process_balloon_sys(frame);     break;
+      case 0x10A: process_balloon_meta(frame);    break;
       /* STM32H7 sensors */
       case CAN_ID_ACCEL:         process_accel(frame);         break;
       case CAN_ID_GYRO:          process_gyro(frame);          break;
@@ -151,11 +185,17 @@ void CanBridgeNode::process_target_gps(const struct can_frame & frame)
   msg.rssi_dbm        = rssi_dbm_;
   msg.link_quality    = link_quality_;
   pub_target_gps_->publish(msg);
+
+  // balloon telemetry 조립
+  pending_balloon_.latitude  = lat_raw / 1e7;
+  pending_balloon_.longitude = lon_raw / 1e7;
+  balloon_rx_mask_ |= BIT_GPS;
+  try_publish_balloon_telemetry();
 }
 
 void CanBridgeNode::process_target_status(const struct can_frame & frame)
 {
-  if (frame.can_dlc < 5) { return; }
+  if (frame.can_dlc < 8) { return; }
 
   int16_t altitude, rssi;
   std::memcpy(&altitude, &frame.data[0], 2);
@@ -163,6 +203,16 @@ void CanBridgeNode::process_target_status(const struct can_frame & frame)
 
   rssi_dbm_     = static_cast<float>(rssi);
   link_quality_ = frame.data[4];
+
+  // balloon 조립
+  pending_balloon_.kf_altitude_m  = static_cast<float>(altitude);
+  pending_balloon_.rssi_dbm       = static_cast<int16_t>(rssi);
+  pending_balloon_.gps_fix        = frame.data[4];
+  pending_balloon_.gps_sats_used  = frame.data[5];
+  pending_balloon_.utc_hour       = frame.data[6];
+  pending_balloon_.utc_min        = frame.data[7];
+  balloon_rx_mask_ |= BIT_STATUS;
+  try_publish_balloon_telemetry();
 }
 
 /* ── STM32H7 sensor frame handlers ─────────────────────────────────────── */
@@ -323,6 +373,163 @@ void CanBridgeNode::send_can_frame(uint32_t id, const uint8_t * data, uint8_t dl
   if (write(can_socket_, &frame, sizeof(frame)) != sizeof(frame)) {
     RCLCPP_WARN(get_logger(), "CAN TX failed for ID 0x%03X: %s", id, strerror(errno));
   }
+}
+
+/* ── ESP32 Balloon Telemetry frame handlers (0x102~0x10A) ───────────────── */
+
+void CanBridgeNode::process_balloon_utc(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  pending_balloon_.utc_sec          = frame.data[0];
+  pending_balloon_.utc_day          = frame.data[1];
+  pending_balloon_.utc_month        = frame.data[2];
+  pending_balloon_.gps_sats_in_view = frame.data[3];
+  uint16_t year, flags;
+  std::memcpy(&year,  &frame.data[4], 2);
+  std::memcpy(&flags, &frame.data[6], 2);
+  pending_balloon_.utc_year     = year;
+  pending_balloon_.status_flags = flags;
+  balloon_rx_mask_ |= BIT_UTC;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_accel(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  int16_t ax, ay, az, gx;
+  std::memcpy(&ax, &frame.data[0], 2);
+  std::memcpy(&ay, &frame.data[2], 2);
+  std::memcpy(&az, &frame.data[4], 2);
+  std::memcpy(&gx, &frame.data[6], 2);
+  pending_balloon_.accel_x_mps2 = ax / 100.0f;
+  pending_balloon_.accel_y_mps2 = ay / 100.0f;
+  pending_balloon_.accel_z_mps2 = az / 100.0f;
+  pending_balloon_.gyro_x_rads  = gx / 1000.0f;
+  balloon_rx_mask_ |= BIT_ACCEL;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_gyromag(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  int16_t gy, gz, mx, my;
+  std::memcpy(&gy, &frame.data[0], 2);
+  std::memcpy(&gz, &frame.data[2], 2);
+  std::memcpy(&mx, &frame.data[4], 2);
+  std::memcpy(&my, &frame.data[6], 2);
+  pending_balloon_.gyro_y_rads = gy / 1000.0f;
+  pending_balloon_.gyro_z_rads = gz / 1000.0f;
+  pending_balloon_.mag_x_ut    = mx / 10.0f;
+  pending_balloon_.mag_y_ut    = my / 10.0f;
+  balloon_rx_mask_ |= BIT_GYROMAG;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_orient(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  int16_t mz, roll, pitch, palt;
+  std::memcpy(&mz,    &frame.data[0], 2);
+  std::memcpy(&roll,  &frame.data[2], 2);
+  std::memcpy(&pitch, &frame.data[4], 2);
+  std::memcpy(&palt,  &frame.data[6], 2);
+  pending_balloon_.mag_z_ut         = mz   / 10.0f;
+  pending_balloon_.kf_roll_deg      = roll  / 100.0f;
+  pending_balloon_.kf_pitch_deg     = pitch / 100.0f;
+  pending_balloon_.press_altitude_m = static_cast<float>(palt);
+  balloon_rx_mask_ |= BIT_ORIENT;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_env(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  int16_t bt, et, st;
+  uint16_t rh;
+  std::memcpy(&bt, &frame.data[0], 2);
+  std::memcpy(&et, &frame.data[2], 2);
+  std::memcpy(&st, &frame.data[4], 2);
+  std::memcpy(&rh, &frame.data[6], 2);
+  pending_balloon_.board_temp_c     = bt / 100.0f;
+  pending_balloon_.external_temp_c  = et / 100.0f;
+  pending_balloon_.sht31_temp_c     = st / 100.0f;
+  pending_balloon_.sht31_rh_percent = rh / 100.0f;
+  balloon_rx_mask_ |= BIT_ENV;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_press(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  uint32_t press;
+  int16_t  temp;
+  uint16_t co2;
+  std::memcpy(&press, &frame.data[0], 4);
+  std::memcpy(&temp,  &frame.data[4], 2);
+  std::memcpy(&co2,   &frame.data[6], 2);
+  pending_balloon_.ms5611_press_pa = press;
+  pending_balloon_.ms5611_temp_c   = temp / 100.0f;
+  pending_balloon_.co2_ppm         = co2;
+  balloon_rx_mask_ |= BIT_PRESS;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_air(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  uint16_t pm1, pm25, pm10;
+  int16_t  oz;
+  std::memcpy(&pm1,  &frame.data[0], 2);
+  std::memcpy(&pm25, &frame.data[2], 2);
+  std::memcpy(&pm10, &frame.data[4], 2);
+  std::memcpy(&oz,   &frame.data[6], 2);
+  pending_balloon_.pm1_ugm3  = pm1;
+  pending_balloon_.pm25_ugm3 = pm25;
+  pending_balloon_.pm10_ugm3 = pm10;
+  pending_balloon_.ozone_ppb = oz;
+  balloon_rx_mask_ |= BIT_AIR;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_sys(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 8) { return; }
+  uint16_t gdk, bat;
+  int16_t  btemp;
+  std::memcpy(&gdk,   &frame.data[0], 2);
+  std::memcpy(&bat,   &frame.data[2], 2);
+  std::memcpy(&btemp, &frame.data[4], 2);
+  pending_balloon_.gdk101_usvh               = gdk   / 100.0f;
+  pending_balloon_.bat_mv                    = bat;
+  pending_balloon_.bat_temp_c                = btemp / 100.0f;
+  pending_balloon_.heater_bat_duty_percent   = frame.data[6];
+  pending_balloon_.heater_board_duty_percent = frame.data[7];
+  balloon_rx_mask_ |= BIT_SYS;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::process_balloon_meta(const struct can_frame & frame)
+{
+  if (frame.can_dlc < 6) { return; }
+  uint16_t seq;
+  uint32_t uptime;
+  std::memcpy(&seq,    &frame.data[0], 2);
+  std::memcpy(&uptime, &frame.data[2], 4);
+  pending_balloon_.seq       = seq;
+  pending_balloon_.uptime_ms = uptime;
+  balloon_rx_mask_ |= BIT_META;
+  try_publish_balloon_telemetry();
+}
+
+void CanBridgeNode::try_publish_balloon_telemetry()
+{
+  if (balloon_rx_mask_ != BALLOON_FULL_MASK) { return; }
+
+  pending_balloon_.header.stamp    = now();
+  pending_balloon_.header.frame_id = "balloon";
+  pub_balloon_telem_->publish(pending_balloon_);
+
+  balloon_rx_mask_ = 0;  // 다음 세트 대기
 }
 
 }  // namespace antenna_tracker_hardware

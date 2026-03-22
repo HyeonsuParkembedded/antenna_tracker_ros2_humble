@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TargetGPS.msg"
   "msg/TrackerDiagnostics.msg"
   "msg/Heartbeat.msg"
+  "msg/BalloonTelemetry.msg"
   "srv/SetMode.srv"
   "srv/SetManualTarget.srv"
   "srv/GetStatus.srv"
