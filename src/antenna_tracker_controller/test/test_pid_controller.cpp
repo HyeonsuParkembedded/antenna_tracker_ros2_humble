@@ -21,7 +21,9 @@ TEST(DualAxisCascadePidTest, Initialization) {
   double az_out = 0.0, el_out = 0.0;
   pid.compute(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, az_out, el_out);
   EXPECT_DOUBLE_EQ(az_out, 0.0);
-  EXPECT_DOUBLE_EQ(el_out, 50.0);
+  /* Gravity compensation removed from PID (NMPC handles gravity via double-integrator model).
+   * With zero error and zero state, output is 0. */
+  EXPECT_DOUBLE_EQ(el_out, 0.0);
 }
 
 int main(int argc, char **argv) {
