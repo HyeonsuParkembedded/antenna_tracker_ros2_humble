@@ -10,6 +10,9 @@ static constexpr double DT           = 0.01;               // 100 Hz integration
 static constexpr double EL_MAX_RAD   = M_PI / 2.0;        // 90°
 /* Gravity coefficient — must match NMPC model: el_ddot = u_el - GRAVITY_COEFF * cos(el) */
 static constexpr double GRAVITY_COEFF = 50.0;              // rad/s²
+/* Viscous damping on AZ — approximates real stepper motor's near-instant stop.
+ * az_ddot = u_az - AZ_DAMPING * az_vel  (time constant τ = 1/10 = 0.1 s) */
+static constexpr double AZ_DAMPING    = 10.0;              // rad/s² per rad/s
 
 class SimMotorBridge : public rclcpp::Node {
 public:
@@ -51,8 +54,9 @@ private:
     }
 
     void integrate_and_publish() {
-        /* AZ: double integrator — az_ddot = u_az (no gravity on azimuth) */
-        az_vel_rps_ += az_acc_rads2_ * DT;
+        /* AZ: double integrator + viscous damping — az_ddot = u_az - AZ_DAMPING * az_vel
+         * Damping approximates real stepper motor's near-instant stop when cmd=0. */
+        az_vel_rps_ += (az_acc_rads2_ - AZ_DAMPING * az_vel_rps_) * DT;
         az_pos_rad_ += az_vel_rps_ * DT;
         az_pos_rad_ = std::fmod(az_pos_rad_, TWO_PI);
         if (az_pos_rad_ < 0.0) az_pos_rad_ += TWO_PI;
