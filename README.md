@@ -406,7 +406,18 @@ sudo ip link add dev vcan0 type vcan
 sudo ip link set up vcan0
 ```
 
-### 2. Docker 컨테이너 실행
+### 2. Docker 이미지 준비
+
+```bash
+# 방법 A: GHCR에서 pre-built 이미지 pull (권장)
+docker pull ghcr.io/hyeonsuparkembedded/antenna_tracker_env:latest
+docker tag ghcr.io/hyeonsuparkembedded/antenna_tracker_env:latest antenna_tracker_env
+
+# 방법 B: 로컬에서 직접 빌드
+docker build -t antenna_tracker_env docker/
+```
+
+### 3. Docker 컨테이너 실행
 
 ```bash
 cd docker
