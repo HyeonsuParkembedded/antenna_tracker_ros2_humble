@@ -64,16 +64,8 @@ def generate_launch_description():
             output='screen'
         ),
 
-        # Simulated target GPS publisher - 풍선 출발지 전남 나주 (ascending phase start)
-        ExecuteProcess(
-            cmd=[
-                'ros2', 'topic', 'pub', '--rate', '1',
-                '/antenna/target_gps',
-                'antenna_tracker_msgs/msg/TargetGPS',
-                '{"latitude": 35.0300, "longitude": 126.7100, "altitude_m": 5000.0, "rssi_dbm": -65.0}',
-            ],
-            output='screen'
-        ),
+        # NOTE: /antenna/target_gps는 balloon_sim.py가 담당 (동적 궤적 + Friis RSSI)
+        # docker exec -it antenna_tracker_dev bash -c "... python3 /ros2_ws/scripts/balloon_sim.py --speed 60"
 
         # Motor velocity translator node
         Node(
