@@ -87,10 +87,16 @@ src/
 ├── antenna_tracker_bringup/    # 런치 파일 + 파라미터
 └── antenna_tracker_web/        # GCS 웹 대시보드 (rosbridge + HTTP)
 
-firmware/                       # STM32H7 Zephyr CAN 펌웨어
-  ├── src/main.c                # CAN TX/RX + 센서 읽기 + 스테퍼 제어
-  ├── app.overlay               # 디바이스 트리 오버레이
-  └── prj.conf                  # Zephyr Kconfig
+firmware/                       # STM32H7 Nucleo — Zephyr RTOS CAN 펌웨어
+  ├── src/main.c                # CAN TX/RX + BMI270/MLX90393/AS5600/GPS + 스테퍼
+  ├── app.overlay               # 디바이스 트리 오버레이 (I2C1/2, FDCAN1, USART1)
+  └── prj.conf                  # Zephyr Kconfig (CONFIG_CAN=y)
+
+firmware_esp32/                 # TTGO LoRa 32 V2.1 — Zephyr RTOS LoRa-CAN 펌웨어
+  ├── src/main.c                # LoRa RX (SX1276) → CAN TX (TWAI 0x100/0x101)
+  ├── app.overlay               # 디바이스 트리 오버레이 (SPI2, TWAI GPIO32/33)
+  └── prj.conf                  # Zephyr Kconfig (CONFIG_LORA=y, CONFIG_CAN=y)
+
 scripts/                        # 설치/배포 자동화 스크립트
 ```
 
@@ -136,17 +142,26 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-### 펌웨어 빌드 및 플래시 (STM32H7)
+### 펌웨어 빌드 및 플래시
 
 ```bash
-# Zephyr 환경 활성화
+# Zephyr 환경 활성화 (공통)
 source ~/zephyrproject/.venv/bin/activate
 source ~/zephyrproject/zephyr/zephyr-env.sh
 
+# STM32H7 Nucleo (FDCAN1 CAN 버스)
 cd firmware
 west build -b nucleo_h7a3zi_q
-west flash
+west flash   # ST-Link 내장, 자동 감지
+
+# TTGO LoRa 32 V2.1 (ESP32 TWAI + SX1276 LoRa)
+cd firmware_esp32
+west build -b esp32_devkitc_wroom/esp32/procpu
+west flash --esp-device /dev/ttyUSB0   # USB 포트 확인 후 입력
 ```
+
+> ⚠ TTGO TWAI는 외부 CAN 트랜시버(SN65HVD230 등)가 필요합니다.
+> GPIO32(TX), GPIO33(RX)에 트랜시버 연결 후 CAN 버스에 합류하세요.
 
 ---
 
@@ -232,14 +247,21 @@ ros2 launch antenna_tracker_bringup sim.launch.py
 
 실제 STM32H7 보드와 CAN 버스를 연결하여 ROS 2와 통신하는 방법입니다.
 
-### 1. STM32H7 펌웨어 플래시
+### 1. 펌웨어 플래시
 
 ```bash
 source ~/zephyrproject/.venv/bin/activate
 source ~/zephyrproject/zephyr/zephyr-env.sh
+
+# STM32H7 Nucleo
 cd firmware
 west build -b nucleo_h7a3zi_q
 west flash
+
+# TTGO LoRa 32 V2.1
+cd ../firmware_esp32
+west build -b esp32_devkitc_wroom/esp32/procpu
+west flash --esp-device /dev/ttyUSB0
 ```
 
 ### 2. CAN 버스 물리 연결
