@@ -518,6 +518,12 @@ ros2 launch antenna_tracker_bringup sim.launch.py
 
 실제 STM32H7 보드와 CAN 버스를 연결하여 ROS 2와 통신하는 방법입니다.
 
+> RPi4B에서 Docker로 실행하는 경우 개발 환경 이미지를 pull해 사용할 수 있습니다:
+> ```bash
+> docker pull ghcr.io/hyeonsuparkembedded/antenna_tracker_env:latest
+> docker tag ghcr.io/hyeonsuparkembedded/antenna_tracker_env:latest antenna_tracker_env
+> ```
+
 ### 1. 펌웨어 플래시
 
 ```bash
