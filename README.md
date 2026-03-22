@@ -286,8 +286,6 @@ west flash --esp-device /dev/ttyUSB0
 > ⚠ TTGO TWAI는 외부 CAN 트랜시버(SN65HVD230 등)가 필요합니다.
 > GPIO32(TX), GPIO33(RX)에 트랜시버 연결 후 CAN 버스에 합류하세요.
 >
-> ⚠ 플래시 실패 시 TTGO의 BOOT 버튼을 누른 채 USB 연결하면 다운로드 모드로 진입합니다.
-
 ---
 
 ## 펌웨어 이식 가이드 (STM32H7 → 다른 보드)
