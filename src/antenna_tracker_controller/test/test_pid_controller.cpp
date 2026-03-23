@@ -110,7 +110,7 @@ TEST(CascadePidTest, DerivativeOnMeasurementKickFree) {
 
 TEST(CascadePidTest, MeasurementChangeTriggersDerivative) {
   PidGains outer{0.0, 0.0, 1.0};  // only kd
-  PidGains inner{0.0, 0.0, 0.0};
+  PidGains inner{1.0, 0.0, 0.0};  // propagate outer-loop velocity setpoint to output
   CascadePid pid;
   pid.init(outer, inner, 0.01, -1e6, 1e6);
 
@@ -118,7 +118,7 @@ TEST(CascadePidTest, MeasurementChangeTriggersDerivative) {
 
   // Measurement changes from 0 to 5 → derivative = -(5-0)/0.01 = -500
   double out = pid.compute(0.0, 5.0, 0.0);
-  EXPECT_NE(out, 0.0);
+  EXPECT_LT(out, 0.0);
 }
 
 TEST(CascadePidTest, VelocityFeedforwardHelps) {

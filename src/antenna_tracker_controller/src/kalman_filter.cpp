@@ -1,5 +1,20 @@
 #include "antenna_tracker_controller/kalman_filter.hpp"
+#include <cmath>
 #include <cstring>
+
+namespace
+{
+
+double normalize_angle_deg(double angle_deg)
+{
+  angle_deg = std::fmod(angle_deg, 360.0);
+  if (angle_deg < 0.0) {
+    angle_deg += 360.0;
+  }
+  return angle_deg;
+}
+
+}  // namespace
 
 namespace antenna_tracker_controller
 {
@@ -35,12 +50,15 @@ void KalmanFilterAzEl::init(double dt, double q_process, double r_measurement)
 
 void KalmanFilterAzEl::update(double az_meas, double el_meas)
 {
+  az_meas = normalize_angle_deg(az_meas);
+
   /* Predict: state transition [az, az_vel, el, el_vel] */
   std::array<double, 4> pred;
   pred[0] = state_[0] + state_[1] * dt_;  /* az = az + az_vel * dt */
   pred[1] = state_[1];                    /* az_vel constant */
   pred[2] = state_[2] + state_[3] * dt_;  /* el = el + el_vel * dt */
   pred[3] = state_[3];                    /* el_vel constant */
+  pred[0] = normalize_angle_deg(pred[0]);
 
   /* K-C1: Full covariance prediction using F*P*F^T + Q for constant-velocity model */
   /* F = [[1,dt,0,0],[0,1,0,0],[0,0,1,dt],[0,0,0,1]] */
@@ -91,6 +109,7 @@ void KalmanFilterAzEl::update(double az_meas, double el_meas)
   P_[2][2] = p22; P_[2][3] = p23; P_[3][2] = p32; P_[3][3] = p33;
 
   state_ = pred;
+  state_[0] = normalize_angle_deg(state_[0]);
 }
 
 }  // namespace antenna_tracker_controller

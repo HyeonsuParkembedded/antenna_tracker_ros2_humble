@@ -53,6 +53,7 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -c "
             set -e
+            apt-get update -qq
             apt-get install -q -y lcov > /dev/null 2>&1
 
             cd /ros2_ws
@@ -67,6 +68,7 @@ jobs:
             # Remove: test files, ROS2/system headers, acados generated code
             lcov --remove /tmp/cov_raw.info \
                  '*/test/*' \
+                 '*/rosidl_generator_cpp/*' \
                  '/opt/ros/*' \
                  '/usr/include/*' \
                  '/usr/local/*' \
@@ -104,12 +106,16 @@ jobs:
 
       - name: Setup vcan interface
         run: |
-          # GitHub Actions Azure 커널은 vcan 모듈이 기본 미포함
-          # linux-modules-extra 패키지로 설치
           sudo apt-get update -qq
-          sudo apt-get install -y linux-modules-extra-$(uname -r)
-          sudo modprobe vcan
-          sudo ip link add dev vcan0 type vcan
+
+          if ! ip link show vcan0 >/dev/null 2>&1; then
+            sudo modprobe vcan || {
+              sudo apt-get install -y linux-modules-extra-$(uname -r)
+              sudo modprobe vcan
+            }
+            sudo ip link add dev vcan0 type vcan
+          fi
+
           sudo ip link set up vcan0
           ip link show vcan0
 

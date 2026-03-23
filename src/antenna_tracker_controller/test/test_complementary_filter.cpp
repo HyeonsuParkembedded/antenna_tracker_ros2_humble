@@ -16,13 +16,19 @@ TEST(ComplementaryFilterTest, BasicInitialization) {
 }
 
 TEST(ComplementaryFilterTest, SetAlphaStored) {
-  ComplementaryFilter filter;
-  filter.set_alpha(0.5);
-  filter.set_declination(0.0);
-  // Two updates with different alpha should yield different pitch (smoke test)
-  filter.update(0.0, 0.0, 9.81, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-  filter.update(0.0, 0.0, 9.81, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0);
-  EXPECT_NE(filter.orientation().pitch, 0.0);
+  ComplementaryFilter low_alpha;
+  ComplementaryFilter high_alpha;
+  low_alpha.set_alpha(0.2);
+  high_alpha.set_alpha(0.8);
+  low_alpha.set_declination(0.0);
+  high_alpha.set_declination(0.0);
+
+  // Same accelerometer input should produce different roll blending when alpha differs.
+  low_alpha.update(0.0, 9.81, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+  high_alpha.update(0.0, 9.81, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+
+  EXPECT_NE(low_alpha.orientation().roll, high_alpha.orientation().roll);
+  EXPECT_GT(low_alpha.orientation().roll, high_alpha.orientation().roll);
 }
 
 /* --- First vs. subsequent updates (initialized_ branch) ---------------- */
