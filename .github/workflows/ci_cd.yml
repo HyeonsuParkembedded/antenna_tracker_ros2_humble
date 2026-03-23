@@ -254,6 +254,16 @@ jobs:
               echo 'Balloon telemetry integration test PASSED'
             "
 
+      - name: End-to-end simulation test — Gazebo closed loop
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/ros2_ws \
+            antenna_tracker_env bash -lc "
+              set -e
+              cd /ros2_ws
+              bash /ros2_ws/scripts/test_sim_e2e.sh
+            "
+
       - name: Push Docker image (CD)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |

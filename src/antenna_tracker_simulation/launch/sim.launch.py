@@ -2,6 +2,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
 
@@ -14,6 +15,7 @@ def generate_launch_description():
 
     robot_description = Command(['xacro ', xacro_file])
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    launch_rviz = LaunchConfiguration('launch_rviz', default='true')
 
     gz_env = {
         'DISPLAY': os.environ.get('DISPLAY', ':99'),
@@ -23,6 +25,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('launch_rviz', default_value='true'),
 
         # Force IGN transport to use loopback (avoids multi-interface confusion in host-network Docker)
         SetEnvironmentVariable('IGN_IP', '127.0.0.1'),
@@ -125,6 +128,7 @@ def generate_launch_description():
             executable='rviz2',
             arguments=['-d', rviz_config],
             parameters=[{'use_sim_time': use_sim_time}],
-            output='screen'
+            output='screen',
+            condition=IfCondition(launch_rviz)
         ),
     ])
