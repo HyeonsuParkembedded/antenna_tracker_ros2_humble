@@ -134,8 +134,10 @@ double NavigationNode::elevation_angle(
   }
 
   if (distance > EARTH_RADIUS_M * M_PI * 0.99) {
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-      "Near-antipodal target (dist=%.0f km): bearing undefined", distance / 1000.0);
+    /* Static method cannot use RCLCPP_WARN_THROTTLE (no 'this') — use stderr */
+    fprintf(stderr,
+      "[navigation] WARN: near-antipodal target (dist=%.0f km): bearing undefined\n",
+      distance / 1000.0);
   }
 
   double gamma = distance / EARTH_RADIUS_M;
