@@ -281,6 +281,7 @@ const char * StateMachineNode::mode_name(OperationMode mode)
 
 }  // namespace antenna_tracker_controller
 
+#ifndef ANTENNA_TRACKER_TEST_ENV
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
@@ -288,3 +289,4 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return 0;
 }
+#endif

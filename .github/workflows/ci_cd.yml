@@ -264,6 +264,16 @@ jobs:
               bash /ros2_ws/scripts/test_sim_e2e.sh
             "
 
+      - name: Simulation regression test — boundaries and soak
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/ros2_ws \
+            antenna_tracker_env bash -lc "
+              set -e
+              cd /ros2_ws
+              bash /ros2_ws/scripts/test_sim_regression.sh
+            "
+
       - name: Push Docker image (CD)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |

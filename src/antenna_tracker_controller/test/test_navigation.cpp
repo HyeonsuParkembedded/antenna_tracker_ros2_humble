@@ -328,6 +328,35 @@ TEST_F(NavigationNodeRosTest, BelowHorizonElevationIsClampedToZero) {
   EXPECT_NEAR(last_elevation_, 0.0, 1e-6);
 }
 
+TEST_F(NavigationNodeRosTest, AutoModePublishesAgainAfterReturningFromManual) {
+  publish_ground_fix(37.0, 127.0, 100.0, 0);
+  publish_mode(1);
+  publish_target(37.1, 127.0, 200.0);
+
+  spin_for(200ms);
+  EXPECT_FALSE(azimuth_received_);
+  EXPECT_FALSE(elevation_received_);
+
+  azimuth_received_ = false;
+  elevation_received_ = false;
+  publish_mode(0);
+  publish_target(37.1, 127.0, 200.0);
+
+  ASSERT_TRUE(wait_for_targets());
+  EXPECT_NEAR(last_azimuth_, 0.0, 1.0);
+  EXPECT_GT(last_elevation_, 0.0);
+}
+
+TEST_F(NavigationNodeRosTest, VerticalTargetPublishesClampedHighElevation) {
+  publish_ground_fix(37.0, 127.0, 0.0, 0);
+  publish_target(37.0, 127.0, 1000.0);
+
+  ASSERT_TRUE(wait_for_targets());
+  EXPECT_NEAR(last_elevation_, 90.0, 1e-6);
+  EXPECT_GE(last_azimuth_, 0.0);
+  EXPECT_LT(last_azimuth_, 360.0);
+}
+
 int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
