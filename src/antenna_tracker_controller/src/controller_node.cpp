@@ -162,6 +162,16 @@ void ControllerNode::control_timer_callback()
     state_msg.az_motor_cmd = 0.0;
     state_msg.el_motor_cmd = 0.0;
     pub_state_->publish(state_msg);
+
+    if (active_goal_ && active_goal_->is_canceling()) {
+      auto result = std::make_shared<TrackTarget::Result>();
+      result->success = false;
+      result->final_azimuth = current_azimuth;
+      result->final_elevation = current_elevation;
+      result->tracking_duration_sec = (now() - goal_start_time_).seconds();
+      active_goal_->canceled(result);
+      active_goal_.reset();
+    }
     return;
   }
 
@@ -219,6 +229,17 @@ void ControllerNode::control_timer_callback()
 
   /* Action feedback */
   if (active_goal_) {
+    if (active_goal_->is_canceling()) {
+      auto result = std::make_shared<TrackTarget::Result>();
+      result->success = false;
+      result->final_azimuth = current_azimuth;
+      result->final_elevation = current_elevation;
+      result->tracking_duration_sec = (now() - goal_start_time_).seconds();
+      active_goal_->canceled(result);
+      active_goal_.reset();
+      return;
+    }
+
     auto feedback = std::make_shared<TrackTarget::Feedback>();
     feedback->current_azimuth = current_azimuth;
     feedback->current_elevation = current_elevation;
@@ -291,6 +312,7 @@ void ControllerNode::handle_accepted(
 
 }  // namespace antenna_tracker_controller
 
+#ifndef ANTENNA_TRACKER_TEST_ENV
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
@@ -298,3 +320,4 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return 0;
 }
+#endif

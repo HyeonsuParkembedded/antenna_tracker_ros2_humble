@@ -108,6 +108,11 @@ if(BUILD_TESTING)
   target_compile_definitions(test_state_machine PRIVATE ANTENNA_TRACKER_TEST_ENV)
   ament_target_dependencies(test_state_machine rclcpp antenna_tracker_msgs std_msgs)
 
+  ament_add_gtest(test_controller_node test/test_controller_node.cpp src/controller_node.cpp)
+  target_compile_definitions(test_controller_node PRIVATE ANTENNA_TRACKER_TEST_ENV)
+  target_link_libraries(test_controller_node mpc_controller)
+  ament_target_dependencies(test_controller_node rclcpp rclcpp_action antenna_tracker_msgs std_msgs)
+
   ament_add_gtest(test_mpc_controller test/test_mpc_controller.cpp)
   target_link_libraries(test_mpc_controller mpc_controller)
   ament_target_dependencies(test_mpc_controller rclcpp)

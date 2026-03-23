@@ -297,6 +297,21 @@ protected:
   }
 };
 
+class StateMachineNodeFastCanTimeoutRosTest : public StateMachineNodeRosTest
+{
+protected:
+  rclcpp::NodeOptions make_node_options() const override
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides({
+      rclcpp::Parameter("imu_timeout_sec", 1.0),
+      rclcpp::Parameter("lora_timeout_sec", 0.12),
+      rclcpp::Parameter("diagnostics_rate_hz", 50.0),
+    });
+    return options;
+  }
+};
+
 }  // namespace
 
 TEST_F(StateMachineNodeRosTest, ModeTransitionsAndStatusAreConsistent)
@@ -415,6 +430,27 @@ TEST_F(StateMachineNodeRosTest, DiagnosticsReflectRecentInputs)
   EXPECT_TRUE(last_diagnostics_.imu_ok);
   EXPECT_TRUE(last_diagnostics_.encoder_ok);
   EXPECT_TRUE(last_diagnostics_.can_ok);
+}
+
+TEST_F(StateMachineNodeFastCanTimeoutRosTest, TargetTimeoutClearsCanHealth)
+{
+  publish_fusion();
+  publish_target_gps();
+
+  ASSERT_TRUE(spin_until(
+    executor_,
+    [this]() {
+      return diagnostics_received_ && last_diagnostics_.can_ok;
+    },
+    700ms));
+
+  diagnostics_received_ = false;
+  ASSERT_TRUE(spin_until(
+    executor_,
+    [this]() {
+      return diagnostics_received_ && !last_diagnostics_.can_ok;
+    },
+    700ms));
 }
 
 TEST_F(StateMachineNodeFastTimeoutRosTest, ImuTimeoutTriggersEmergencyMode)

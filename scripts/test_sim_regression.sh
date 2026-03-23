@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+SOAK_DURATION_S="${SOAK_DURATION_S:-30}"
+
 LAUNCH_LOG=/tmp/antenna_tracker_sim_regression.log
 STATE_SNAPSHOT=/tmp/antenna_tracker_regression_state.txt
 STATUS_SNAPSHOT=/tmp/antenna_tracker_regression_status.txt
@@ -215,6 +217,6 @@ await_convergence "az-wrap-positive" 1.0 15.0 45 12.0 12.0
 await_convergence "elevation-upper-limit" 45.0 90.0 50 12.0 14.0
 await_convergence "elevation-lower-limit" 45.0 0.0 45 12.0 10.0
 await_convergence "midrange-hold" 55.0 45.0 45 12.0 12.0
-monitor_soak 30 15.0 15.0
+monitor_soak "${SOAK_DURATION_S}" 15.0 15.0
 
 echo "=== Simulation regression suite passed ==="

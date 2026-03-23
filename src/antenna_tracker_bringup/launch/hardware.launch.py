@@ -1,21 +1,25 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     pkg_bringup = get_package_share_directory('antenna_tracker_bringup')
     params_file = os.path.join(pkg_bringup, 'config', 'hardware_params.yaml')
+    can_interface = LaunchConfiguration('can_interface')
 
     return LaunchDescription([
+        DeclareLaunchArgument('can_interface', default_value='can0'),
 
         # CAN Bridge Node (ESP32 LoRa + STM32H7 sensors via single CAN bus)
         Node(
             package='antenna_tracker_hardware',
             executable='can_bridge_node',
             name='can_bridge_node',
-            parameters=[params_file],
+            parameters=[params_file, {'can_interface': can_interface}],
             output='screen'
         ),
 

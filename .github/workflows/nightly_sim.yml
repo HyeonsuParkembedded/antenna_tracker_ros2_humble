@@ -1,0 +1,109 @@
+name: Nightly Simulation and Bringup
+
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  nightly-regression:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build -t antenna_tracker_env docker/
+
+      - name: Build ROS 2 Workspace
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+            set -e
+            git config --global --add safe.directory /ros2_ws
+            cd /ros2_ws
+            source /opt/ros/humble/setup.bash
+            colcon build --cmake-args -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug
+          "
+
+      - name: Setup vcan interface
+        run: |
+          sudo apt-get update -qq
+
+          if ! ip link show vcan0 >/dev/null 2>&1; then
+            sudo modprobe vcan || {
+              sudo apt-get install -y linux-modules-extra-$(uname -r)
+              sudo modprobe vcan
+            }
+            sudo ip link add dev vcan0 type vcan
+          fi
+
+          sudo ip link set up vcan0
+          ip link show vcan0
+
+      - name: Nightly controller tests
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+            set -e
+            git config --global --add safe.directory /ros2_ws
+            cd /ros2_ws
+            source /opt/ros/humble/setup.bash
+            source install/setup.bash
+            colcon test --packages-select antenna_tracker_controller
+            colcon test-result --verbose
+          "
+
+      - name: Nightly AUTO simulation E2E
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+            set -e
+            cd /ros2_ws
+            source /opt/ros/humble/setup.bash
+            source install/setup.bash
+            bash /ros2_ws/scripts/test_sim_auto_e2e.sh
+          "
+
+      - name: Nightly long simulation regression soak
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+            set -e
+            cd /ros2_ws
+            source /opt/ros/humble/setup.bash
+            source install/setup.bash
+            SOAK_DURATION_S=300 bash /ros2_ws/scripts/test_sim_regression.sh
+          "
+
+      - name: Nightly bringup smoke — sim
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+            set -e
+            cd /ros2_ws
+            source /opt/ros/humble/setup.bash
+            source install/setup.bash
+            bash /ros2_ws/scripts/test_bringup_smoke.sh sim
+          "
+
+      - name: Nightly bringup smoke — web
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+            set -e
+            cd /ros2_ws
+            source /opt/ros/humble/setup.bash
+            source install/setup.bash
+            bash /ros2_ws/scripts/test_bringup_smoke.sh web
+          "
+
+      - name: Nightly bringup smoke — hardware
+        run: |
+          docker run --rm --privileged --network host \
+            -v ${{ github.workspace }}:/ros2_ws antenna_tracker_env bash -lc "
+              set -e
+              cd /ros2_ws
+              source /opt/ros/humble/setup.bash
+              source install/setup.bash
+              bash /ros2_ws/scripts/test_bringup_smoke.sh hardware
+            "

@@ -61,8 +61,10 @@ RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then rosdep init
 RUN rosdep update
 
 # Set DDS middleware (CycloneDDS, loopback only for container use)
+# Raise the auto participant budget so multi-process sim launches can coexist
+# with rosbridge inside the same container.
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-ENV CYCLONEDDS_URI="<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General></Domain></CycloneDDS>"
+ENV CYCLONEDDS_URI="<CycloneDDS><Domain><General><NetworkInterfaceAddress>lo</NetworkInterfaceAddress></General><Discovery><ParticipantIndex>auto</ParticipantIndex><MaxAutoParticipantIndex>64</MaxAutoParticipantIndex></Discovery></Domain></CycloneDDS>"
 
 # Create workspace directory
 WORKDIR /ros2_ws
